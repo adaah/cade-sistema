@@ -8,11 +8,19 @@ import { Onboarding } from "./components/onboarding/Onboarding";
 import Index from "./pages/Index";
 import Disciplinas from "./pages/Disciplinas";
 import Planejador from "./pages/Planejador";
-import Fluxograma from "./pages/Fluxograma";
 import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 30, // 30 minutes
+      gcTime: 1000 * 60 * 60, // 1 hour
+      retry: 2,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function AppContent() {
   const { isOnboarded } = useApp();
@@ -27,7 +35,6 @@ function AppContent() {
         <Route path="/" element={<Index />} />
         <Route path="/disciplinas" element={<Disciplinas />} />
         <Route path="/planejador" element={<Planejador />} />
-        <Route path="/fluxograma" element={<Fluxograma />} />
         <Route path="/configuracoes" element={<Configuracoes />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
