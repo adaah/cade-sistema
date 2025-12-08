@@ -1,4 +1,4 @@
-import { Home, BookOpen, Calendar, GitBranch, Settings, Sun, Moon, Github } from 'lucide-react';
+import { Home, BookOpen, Calendar, Settings, Sun, Moon, Github } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
@@ -7,7 +7,6 @@ const menuItems = [
   { title: 'Início', url: '/', icon: Home },
   { title: 'Disciplinas', url: '/disciplinas', icon: BookOpen },
   { title: 'Meu Planejador', url: '/planejador', icon: Calendar },
-  { title: 'Fluxograma', url: '/fluxograma', icon: GitBranch },
   { title: 'Configurações', url: '/configuracoes', icon: Settings },
 ];
 
@@ -19,7 +18,7 @@ export function AppSidebar() {
       {/* Logo */}
       <div className="p-6">
         <h1 className="text-2xl font-bold text-primary">CADE</h1>
-        <p className="text-xs text-muted-foreground mt-1">Portal Acadêmico</p>
+        <p className="text-xs text-muted-foreground mt-1">Portal Acadêmico UFBA</p>
       </div>
 
       {/* Navigation */}
@@ -64,7 +63,7 @@ export function AppSidebar() {
           </button>
           
           <a
-            href="https://github.com"
+            href="https://github.com/FormigTeen/sigaa-static"
             target="_blank"
             rel="noopener noreferrer"
             className="p-2 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent transition-colors"

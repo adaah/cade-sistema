@@ -1,18 +1,20 @@
 import { useState } from 'react';
-import { Check, GraduationCap, Search } from 'lucide-react';
+import { Check, GraduationCap, Search, Loader2 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
-import { programs } from '@/data/mockData';
+import { usePrograms } from '@/hooks/useApi';
 import { cn } from '@/lib/utils';
 
 export function Onboarding() {
   const { setSelectedCourse, setIsOnboarded } = useApp();
+  const { data: programs, isLoading, error } = usePrograms();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
 
-  const filteredPrograms = programs.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.code.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredPrograms = programs?.filter(p =>
+    p.title.toLowerCase().includes(search.toLowerCase()) ||
+    p.location.toLowerCase().includes(search.toLowerCase()) ||
+    p.program_type.toLowerCase().includes(search.toLowerCase())
+  ) || [];
 
   const handleSubmit = () => {
     if (selected) {
@@ -20,6 +22,8 @@ export function Onboarding() {
       setIsOnboarded(true);
     }
   };
+
+  const selectedProgram = programs?.find(p => p.id_ref === selected);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -30,7 +34,7 @@ export function Onboarding() {
             <GraduationCap className="w-8 h-8 text-primary-foreground" />
           </div>
           <h1 className="text-3xl font-bold text-foreground">CADE</h1>
-          <p className="text-muted-foreground mt-2">Portal Acadêmico</p>
+          <p className="text-muted-foreground mt-2">Portal Acadêmico UFBA</p>
         </div>
 
         {/* Card */}
@@ -52,31 +56,59 @@ export function Onboarding() {
           </div>
 
           {/* Course List */}
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {filteredPrograms.map((program) => (
-              <button
-                key={program.id}
-                onClick={() => setSelected(program.id)}
-                className={cn(
-                  "w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all",
-                  "border-2",
-                  selected === program.id
-                    ? "border-primary bg-primary/10"
-                    : "border-transparent bg-muted hover:bg-accent"
-                )}
-              >
-                <div className="text-left">
-                  <p className="font-medium text-card-foreground">{program.name}</p>
-                  <p className="text-sm text-muted-foreground">{program.code}</p>
-                </div>
-                {selected === program.id && (
-                  <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-                    <Check className="w-4 h-4 text-primary-foreground" />
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : error ? (
+            <div className="text-center py-8 text-destructive">
+              <p>Erro ao carregar cursos</p>
+              <p className="text-sm text-muted-foreground mt-1">Tente novamente mais tarde</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {filteredPrograms.slice(0, 50).map((program) => (
+                <button
+                  key={program.id_ref}
+                  onClick={() => setSelected(program.id_ref)}
+                  className={cn(
+                    "w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all",
+                    "border-2",
+                    selected === program.id_ref
+                      ? "border-primary bg-primary/10"
+                      : "border-transparent bg-muted hover:bg-accent"
+                  )}
+                >
+                  <div className="text-left">
+                    <p className="font-medium text-card-foreground text-sm">{program.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {program.program_type} • {program.location} • {program.mode}
+                    </p>
                   </div>
-                )}
-              </button>
-            ))}
-          </div>
+                  {selected === program.id_ref && (
+                    <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0 ml-2">
+                      <Check className="w-4 h-4 text-primary-foreground" />
+                    </div>
+                  )}
+                </button>
+              ))}
+              {filteredPrograms.length === 0 && (
+                <p className="text-center text-muted-foreground py-4">
+                  Nenhum curso encontrado
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Selected info */}
+          {selectedProgram && (
+            <div className="mt-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
+              <p className="text-sm font-medium text-primary">{selectedProgram.title}</p>
+              <p className="text-xs text-muted-foreground">
+                {selectedProgram.time_code} • {selectedProgram.mode}
+              </p>
+            </div>
+          )}
 
           {/* Submit */}
           <button

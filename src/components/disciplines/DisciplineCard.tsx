@@ -1,18 +1,17 @@
-import { Clock, Heart, Check } from 'lucide-react';
-import { Discipline } from '@/data/mockData';
+import { Clock, Check } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
+import { Course } from '@/services/api';
 
 interface DisciplineCardProps {
-  discipline: Discipline;
+  discipline: Course;
   onClick: () => void;
 }
 
 export function DisciplineCard({ discipline, onClick }: DisciplineCardProps) {
-  const { completedDisciplines, toggleCompletedDiscipline, favoriteDisciplines, toggleFavoriteDiscipline } = useApp();
+  const { completedDisciplines, toggleCompletedDiscipline } = useApp();
 
   const isCompleted = completedDisciplines.includes(discipline.code);
-  const isFavorite = favoriteDisciplines.includes(discipline.code);
 
   return (
     <div
@@ -34,37 +33,20 @@ export function DisciplineCard({ discipline, onClick }: DisciplineCardProps) {
           {discipline.code}
         </span>
         
-        <div className="flex gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleFavoriteDiscipline(discipline.code);
-            }}
-            className={cn(
-              "p-2 rounded-lg transition-colors",
-              isFavorite 
-                ? "text-destructive bg-destructive/10" 
-                : "text-muted-foreground hover:bg-muted"
-            )}
-          >
-            <Heart className={cn("w-4 h-4", isFavorite && "fill-current")} />
-          </button>
-          
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleCompletedDiscipline(discipline.code);
-            }}
-            className={cn(
-              "p-2 rounded-lg transition-colors",
-              isCompleted 
-                ? "text-success bg-success/10" 
-                : "text-muted-foreground hover:bg-muted"
-            )}
-          >
-            <Check className="w-4 h-4" />
-          </button>
-        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleCompletedDiscipline(discipline.code);
+          }}
+          className={cn(
+            "p-2 rounded-lg transition-colors",
+            isCompleted 
+              ? "text-success bg-success/10" 
+              : "text-muted-foreground hover:bg-muted"
+          )}
+        >
+          <Check className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Title */}
@@ -84,13 +66,13 @@ export function DisciplineCard({ discipline, onClick }: DisciplineCardProps) {
       {/* Semester indicator */}
       <div className="mt-3 pt-3 border-t border-border">
         <span className="text-xs text-muted-foreground">
-          {discipline.semester}º Semestre • {discipline.classes.length} turma{discipline.classes.length > 1 ? 's' : ''}
+          {discipline.semester}º Semestre
         </span>
       </div>
 
       {/* Completed overlay */}
       {isCompleted && (
-        <div className="absolute top-3 right-3 px-2 py-1 bg-success rounded-md text-xs font-medium text-success-foreground">
+        <div className="absolute top-3 right-12 px-2 py-1 bg-success rounded-md text-xs font-medium text-success-foreground">
           Cursada
         </div>
       )}

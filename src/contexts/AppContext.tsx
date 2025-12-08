@@ -12,13 +12,18 @@ interface ScheduleItem {
   endTime: string;
 }
 
+interface AppSettings {
+  selectedCourse: string | null;
+  completedDisciplines: string[];
+  scheduledItems: ScheduleItem[];
+  isOnboarded: boolean;
+}
+
 interface AppContextType {
   selectedCourse: string | null;
   setSelectedCourse: (course: string | null) => void;
   completedDisciplines: string[];
   toggleCompletedDiscipline: (code: string) => void;
-  favoriteDisciplines: string[];
-  toggleFavoriteDiscipline: (code: string) => void;
   scheduledItems: ScheduleItem[];
   addToSchedule: (item: ScheduleItem) => void;
   removeFromSchedule: (disciplineCode: string, classCode: string) => void;
@@ -27,6 +32,8 @@ interface AppContextType {
   toggleTheme: () => void;
   isOnboarded: boolean;
   setIsOnboarded: (value: boolean) => void;
+  exportSettings: () => string;
+  importSettings: (json: string) => boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -49,11 +56,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   
   const [completedDisciplines, setCompletedDisciplines] = useState<string[]>(() => {
     const saved = localStorage.getItem('completedDisciplines');
-    return saved ? JSON.parse(saved) : [];
-  });
-  
-  const [favoriteDisciplines, setFavoriteDisciplines] = useState<string[]>(() => {
-    const saved = localStorage.getItem('favoriteDisciplines');
     return saved ? JSON.parse(saved) : [];
   });
   
@@ -82,10 +84,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [completedDisciplines]);
 
   useEffect(() => {
-    localStorage.setItem('favoriteDisciplines', JSON.stringify(favoriteDisciplines));
-  }, [favoriteDisciplines]);
-
-  useEffect(() => {
     localStorage.setItem('scheduledItems', JSON.stringify(scheduledItems));
   }, [scheduledItems]);
 
@@ -100,12 +98,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const toggleCompletedDiscipline = (code: string) => {
     setCompletedDisciplines(prev => 
-      prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code]
-    );
-  };
-
-  const toggleFavoriteDiscipline = (code: string) => {
-    setFavoriteDisciplines(prev => 
       prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code]
     );
   };
@@ -137,14 +129,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
+  const exportSettings = (): string => {
+    const settings: AppSettings = {
+      selectedCourse,
+      completedDisciplines,
+      scheduledItems,
+      isOnboarded
+    };
+    return JSON.stringify(settings, null, 2);
+  };
+
+  const importSettings = (json: string): boolean => {
+    try {
+      const settings = JSON.parse(json) as AppSettings;
+      
+      if (settings.selectedCourse !== undefined) {
+        setSelectedCourse(settings.selectedCourse);
+      }
+      if (Array.isArray(settings.completedDisciplines)) {
+        setCompletedDisciplines(settings.completedDisciplines);
+      }
+      if (Array.isArray(settings.scheduledItems)) {
+        setScheduledItems(settings.scheduledItems);
+      }
+      if (settings.isOnboarded !== undefined) {
+        setIsOnboarded(settings.isOnboarded);
+      }
+      
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       selectedCourse,
       setSelectedCourse,
       completedDisciplines,
       toggleCompletedDiscipline,
-      favoriteDisciplines,
-      toggleFavoriteDiscipline,
       scheduledItems,
       addToSchedule,
       removeFromSchedule,
@@ -152,7 +175,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       theme,
       toggleTheme,
       isOnboarded,
-      setIsOnboarded
+      setIsOnboarded,
+      exportSettings,
+      importSettings
     }}>
       {children}
     </AppContext.Provider>

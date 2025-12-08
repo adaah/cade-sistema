@@ -1,7 +1,8 @@
+import { useRef, useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useApp } from '@/contexts/AppContext';
-import { Sun, Moon, Trash2, RotateCcw, User } from 'lucide-react';
-import { programs } from '@/data/mockData';
+import { usePrograms } from '@/hooks/useApi';
+import { Sun, Moon, Trash2, RotateCcw, User, Download, Upload, Check } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 const Configuracoes = () => {
@@ -12,14 +13,22 @@ const Configuracoes = () => {
     setSelectedCourse,
     setIsOnboarded,
     clearSchedule,
-    completedDisciplines
+    completedDisciplines,
+    exportSettings,
+    importSettings
   } = useApp();
+  
+  const { data: programs } = usePrograms();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importSuccess, setImportSuccess] = useState(false);
 
-  const currentProgram = programs.find(p => p.id === selectedCourse);
+  const currentProgram = programs?.find(p => p.id_ref === selectedCourse);
 
   const handleResetAll = () => {
-    localStorage.clear();
-    window.location.reload();
+    if (confirm('Tem certeza que deseja resetar todos os dados? Esta ação não pode ser desfeita.')) {
+      localStorage.clear();
+      window.location.reload();
+    }
   };
 
   const handleClearSchedule = () => {
@@ -33,6 +42,56 @@ const Configuracoes = () => {
   const handleChangeCourse = () => {
     setIsOnboarded(false);
     setSelectedCourse(null);
+  };
+
+  const handleExport = () => {
+    const data = exportSettings();
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cade-configuracoes-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Exportação concluída",
+      description: "Suas configurações foram salvas em um arquivo JSON."
+    });
+  };
+
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      const success = importSettings(content);
+      
+      if (success) {
+        setImportSuccess(true);
+        toast({
+          title: "Importação concluída",
+          description: "Suas configurações foram restauradas com sucesso."
+        });
+        setTimeout(() => setImportSuccess(false), 2000);
+      } else {
+        toast({
+          title: "Erro na importação",
+          description: "O arquivo selecionado não é válido.",
+          variant: "destructive"
+        });
+      }
+    };
+    reader.readAsText(file);
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -57,7 +116,7 @@ const Configuracoes = () => {
               </div>
               <div>
                 <h3 className="font-semibold text-card-foreground">Meu Curso</h3>
-                <p className="text-sm text-muted-foreground">{currentProgram?.name || 'Não selecionado'}</p>
+                <p className="text-sm text-muted-foreground">{currentProgram?.title || 'Não selecionado'}</p>
               </div>
             </div>
             <button
@@ -112,6 +171,41 @@ const Configuracoes = () => {
             </div>
           </div>
 
+          {/* Export/Import */}
+          <div className="bg-card rounded-xl border border-border p-5">
+            <h3 className="font-semibold text-card-foreground mb-4">Backup & Sincronização</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Exporte suas configurações para usar em outro dispositivo ou faça backup dos seus dados.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleExport}
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors"
+              >
+                <Download className="w-5 h-5" />
+                <span>Exportar</span>
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border transition-colors ${
+                  importSuccess
+                    ? 'border-success bg-success/10 text-success'
+                    : 'border-border text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                {importSuccess ? <Check className="w-5 h-5" /> : <Upload className="w-5 h-5" />}
+                <span>{importSuccess ? 'Importado!' : 'Importar'}</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleImport}
+                className="hidden"
+              />
+            </div>
+          </div>
+
           {/* Actions */}
           <div className="bg-card rounded-xl border border-border p-5">
             <h3 className="font-semibold text-card-foreground mb-4">Ações</h3>
@@ -135,7 +229,7 @@ const Configuracoes = () => {
 
           {/* Footer */}
           <div className="text-center text-sm text-muted-foreground pt-4">
-            <p>CADE - Portal Acadêmico</p>
+            <p>CADE - Portal Acadêmico UFBA</p>
             <p className="mt-1">Desenvolvido com ❤️ para estudantes</p>
           </div>
         </div>

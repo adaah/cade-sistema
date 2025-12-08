@@ -1,162 +1,121 @@
+import { useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { BookOpen, Calendar, GitBranch, ArrowRight } from 'lucide-react';
+import { usePrograms, useCourses } from '@/hooks/useApi';
+import { ScheduleGrid } from '@/components/planner/ScheduleGrid';
+import { ScheduleSummary } from '@/components/planner/ScheduleSummary';
+import { MobileSchedule } from '@/components/planner/MobileSchedule';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Calendar, BookOpen, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { disciplines } from '@/data/mockData';
 
 const Index = () => {
   const { selectedCourse, scheduledItems, completedDisciplines } = useApp();
+  const { data: programs } = usePrograms();
+  const { data: courses, isLoading: loadingCourses } = useCourses();
+  const isMobile = useIsMobile();
+
+  const currentProgram = programs?.find(p => p.id_ref === selectedCourse);
 
   // Get unique scheduled disciplines
-  const scheduledCount = scheduledItems.reduce((acc, item) => {
-    if (!acc.includes(item.disciplineCode)) {
-      acc.push(item.disciplineCode);
-    }
-    return acc;
-  }, [] as string[]).length;
+  const scheduledCount = useMemo(() => {
+    const unique = new Set(scheduledItems.map(item => item.disciplineCode));
+    return unique.size;
+  }, [scheduledItems]);
 
-  // Calculate progress
-  const totalDisciplines = disciplines.length;
-  const progress = Math.round((completedDisciplines.length / totalDisciplines) * 100);
+  // Calculate total workload
+  const totalWorkload = useMemo(() => {
+    const uniqueCodes = [...new Set(scheduledItems.map(item => item.disciplineCode))];
+    return uniqueCodes.reduce((sum, code) => {
+      const course = courses?.find(c => c.code === code);
+      return sum + (course?.workload || 60);
+    }, 0);
+  }, [scheduledItems, courses]);
 
   return (
     <MainLayout>
-      <div className="p-6 max-w-4xl mx-auto animate-fade-in">
+      <div className="p-6 max-w-7xl mx-auto animate-fade-in">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Olá, estudante! 👋
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-foreground mb-1">
+            Minha Grade do Semestre
           </h1>
-          <p className="text-muted-foreground">
-            Organize sua jornada acadêmica de forma inteligente
-          </p>
+          {currentProgram && (
+            <p className="text-muted-foreground text-sm">
+              {currentProgram.title} • {currentProgram.location}
+            </p>
+          )}
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <div className="bg-card rounded-xl border border-border p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-primary" />
-              </div>
-              <span className="text-sm text-muted-foreground">Disciplinas</span>
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          <div className="bg-card rounded-xl border border-border p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <BookOpen className="w-4 h-4" />
+              <span className="text-xs">Disciplinas</span>
             </div>
-            <p className="text-2xl font-bold text-card-foreground">
-              {completedDisciplines.length}/{totalDisciplines}
-            </p>
-            <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-primary rounded-full transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+            <p className="text-2xl font-bold text-card-foreground">{scheduledCount}</p>
           </div>
-
-          <div className="bg-card rounded-xl border border-border p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-success" />
-              </div>
-              <span className="text-sm text-muted-foreground">Na Grade</span>
+          <div className="bg-card rounded-xl border border-border p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Calendar className="w-4 h-4" />
+              <span className="text-xs">Carga Horária</span>
             </div>
-            <p className="text-2xl font-bold text-card-foreground">
-              {scheduledCount}
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              turmas selecionadas
-            </p>
+            <p className="text-2xl font-bold text-card-foreground">{totalWorkload}h</p>
           </div>
-
-          <div className="bg-card rounded-xl border border-border p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
-                <GitBranch className="w-5 h-5 text-warning" />
-              </div>
-              <span className="text-sm text-muted-foreground">Progresso</span>
+          <div className="bg-card rounded-xl border border-border p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <span className="text-xs">Cursadas</span>
             </div>
-            <p className="text-2xl font-bold text-card-foreground">
-              {progress}%
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              do curso concluído
-            </p>
+            <p className="text-2xl font-bold text-success">{completedDisciplines.length}</p>
           </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-foreground">Acesso Rápido</h2>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Link
-              to="/disciplinas"
-              className="group bg-card rounded-xl border border-border p-5 hover:shadow-card-hover hover:border-primary/50 transition-all"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-card-foreground mb-1">
-                    Catálogo de Disciplinas
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Explore as matérias e adicione ao planejador
-                  </p>
-                </div>
-                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-              </div>
+          <div className="bg-card rounded-xl border border-border p-4">
+            <Link to="/planejador" className="text-xs text-primary hover:underline">
+              Editar Grade →
             </Link>
+          </div>
+        </div>
 
+        {/* Schedule View */}
+        {loadingCourses ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : scheduledItems.length === 0 ? (
+          <div className="bg-card rounded-xl border border-border p-12 text-center">
+            <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+            <h2 className="text-lg font-semibold text-card-foreground mb-2">
+              Grade vazia
+            </h2>
+            <p className="text-muted-foreground mb-4">
+              Adicione disciplinas ao seu planejador para visualizar sua grade.
+            </p>
             <Link
               to="/planejador"
-              className="group bg-card rounded-xl border border-border p-5 hover:shadow-card-hover hover:border-primary/50 transition-all"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors"
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-card-foreground mb-1">
-                    Meu Planejador
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Visualize e organize sua grade horária
-                  </p>
-                </div>
-                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-              </div>
-            </Link>
-
-            <Link
-              to="/fluxograma"
-              className="group bg-card rounded-xl border border-border p-5 hover:shadow-card-hover hover:border-primary/50 transition-all"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-card-foreground mb-1">
-                    Fluxograma do Curso
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Acompanhe seu progresso e pré-requisitos
-                  </p>
-                </div>
-                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-              </div>
-            </Link>
-
-            <Link
-              to="/configuracoes"
-              className="group bg-card rounded-xl border border-border p-5 hover:shadow-card-hover hover:border-primary/50 transition-all"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-card-foreground mb-1">
-                    Configurações
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Personalize o portal
-                  </p>
-                </div>
-                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-              </div>
+              Ir para o Planejador
             </Link>
           </div>
-        </div>
+        ) : (
+          <>
+            {isMobile ? (
+              <div className="space-y-6">
+                <ScheduleSummary />
+                <MobileSchedule />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div className="lg:col-span-1">
+                  <ScheduleSummary />
+                </div>
+                <div className="lg:col-span-3 bg-card rounded-xl border border-border p-4">
+                  <ScheduleGrid />
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </MainLayout>
   );
