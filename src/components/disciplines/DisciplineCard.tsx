@@ -64,6 +64,7 @@ export function DisciplineCard({ discipline, onClick }: DisciplineCardProps) {
       </div>
 
       {/* Semester indicator */}
+<<<<<<< HEAD
       {discipline.semester && (
         <div className="mt-3 pt-3 border-t border-border">
           <span className="text-xs text-muted-foreground">
@@ -71,6 +72,13 @@ export function DisciplineCard({ discipline, onClick }: DisciplineCardProps) {
           </span>
         </div>
       )}
+=======
+      <div className="mt-3 pt-3 border-t border-border">
+        <span className="text-xs text-muted-foreground">
+          {discipline.semester}º Semestre
+        </span>
+      </div>
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
 
       {/* Completed overlay */}
       {isCompleted && (

@@ -3,6 +3,7 @@ import { Course, Section, parseSigaaSchedule } from '@/services/api';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+<<<<<<< HEAD
 import { useQuery } from '@tanstack/react-query';
 import { fetchCourseDetail } from '@/services/api';
 import { useCourseByCode, useCourseDetail, useCourseSections } from '@/hooks/useApi';
@@ -36,12 +37,31 @@ export function DisciplineDetail({ code, onClose }: DisciplineDetailProps) {
   const handleAddClass = (section: Section) => {
     const isAlreadyAdded = sections?.some(
       item => item.section_code === section.section_code
+=======
+
+interface DisciplineDetailProps {
+  discipline: Course;
+  sections: Section[];
+  onClose: () => void;
+}
+
+export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDetailProps) {
+  const { scheduledItems, addToSchedule } = useApp();
+
+  const handleAddClass = (section: Section) => {
+    const isAlreadyAdded = scheduledItems.some(
+      item => item.disciplineCode === discipline.code && item.classCode === section.section_code
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
     );
 
     if (isAlreadyAdded) {
       toast({
         title: "Turma já adicionada",
+<<<<<<< HEAD
         description: `${detail?.name} (${section.section_code}) já está no seu planejador.`,
+=======
+        description: `${discipline.name} (${section.section_code}) já está no seu planejador.`,
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
         variant: "destructive"
       });
       return;
@@ -57,6 +77,7 @@ export function DisciplineDetail({ code, onClose }: DisciplineDetailProps) {
 
     if (schedules && schedules.length > 0) {
       schedules.forEach(sched => {
+<<<<<<< HEAD
         // Assuming addToSchedule is still available or needs to be re-added
         // For now, we'll just toast, as the original code had it removed.
         // If addToSchedule is meant to be re-added, it needs to be imported or re-added.
@@ -66,11 +87,24 @@ export function DisciplineDetail({ code, onClose }: DisciplineDetailProps) {
         toast({
           title: "Turma adicionada!",
           description: `${detail?.name} (${section.section_code}) foi adicionada ao planejador.`,
+=======
+        addToSchedule({
+          disciplineCode: discipline.code,
+          disciplineName: discipline.name,
+          classCode: section.section_code,
+          professor: section.professor,
+          schedule: section.schedule_raw || `${sched.day} ${sched.start_time}-${sched.end_time}`,
+          color: '',
+          day: sched.day,
+          startTime: sched.start_time,
+          endTime: sched.end_time
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
         });
       });
 
       toast({
         title: "Turma adicionada!",
+<<<<<<< HEAD
         description: `${detail?.name} (${section.section_code}) foi adicionada. Horário não disponível.`,
         variant: "default"
       });
@@ -81,6 +115,27 @@ export function DisciplineDetail({ code, onClose }: DisciplineDetailProps) {
       toast({
         title: "Turma adicionada!",
         description: `${detail?.name} (${section.section_code}) foi adicionada. Horário não disponível.`,
+=======
+        description: `${discipline.name} (${section.section_code}) foi adicionada ao planejador.`,
+      });
+    } else {
+      // Add without schedule info
+      addToSchedule({
+        disciplineCode: discipline.code,
+        disciplineName: discipline.name,
+        classCode: section.section_code,
+        professor: section.professor,
+        schedule: 'Horário a definir',
+        color: '',
+        day: 'Seg',
+        startTime: '08:00',
+        endTime: '10:00'
+      });
+
+      toast({
+        title: "Turma adicionada!",
+        description: `${discipline.name} (${section.section_code}) foi adicionada. Horário não disponível.`,
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
         variant: "default"
       });
     }
@@ -88,6 +143,7 @@ export function DisciplineDetail({ code, onClose }: DisciplineDetailProps) {
 
   return (
     <div className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-50 flex items-center justify-end">
+<<<<<<< HEAD
       <div className="absolute inset-0" onClick={onClose}/>
       <div className="relative w-full max-w-lg h-full bg-card shadow-elevated animate-slide-in-right overflow-y-auto">
         <div className="sticky top-0 bg-card border-b border-border p-6 z-10">
@@ -146,10 +202,74 @@ export function DisciplineDetail({ code, onClose }: DisciplineDetailProps) {
               <div className="flex flex-wrap gap-2">
                 {detail.prerequisites.map((pr: string) => (
                   <span key={pr} className="px-3 py-1 rounded-lg bg-muted text-muted-foreground text-sm font-medium">{pr}</span>
+=======
+      <div 
+        className="absolute inset-0" 
+        onClick={onClose}
+      />
+      <div className="relative w-full max-w-lg h-full bg-card shadow-elevated animate-slide-in-right overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-card border-b border-border p-6 z-10">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-2 rounded-lg hover:bg-muted transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          <span className={cn(
+            "inline-block px-3 py-1 rounded-lg text-sm font-semibold mb-3",
+            discipline.type === 'obrigatoria'
+              ? "bg-primary/10 text-primary"
+              : "bg-warning/10 text-warning"
+          )}>
+            {discipline.code}
+          </span>
+          
+          <h2 className="text-xl font-bold text-card-foreground pr-10">
+            {discipline.name}
+          </h2>
+
+          <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <Clock className="w-4 h-4" />
+              <span>{discipline.workload}h</span>
+            </div>
+            <span>{discipline.credits} créditos</span>
+            <span>{discipline.semester}º Semestre</span>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Description */}
+          {discipline.description && (
+            <div>
+              <h3 className="font-semibold text-card-foreground mb-2">Ementa</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                {discipline.description}
+              </p>
+            </div>
+          )}
+
+          {/* Prerequisites */}
+          {discipline.prerequisites.length > 0 && (
+            <div>
+              <h3 className="font-semibold text-card-foreground mb-2">Pré-requisitos</h3>
+              <div className="flex flex-wrap gap-2">
+                {discipline.prerequisites.map(prereq => (
+                  <span
+                    key={prereq}
+                    className="px-3 py-1 rounded-lg bg-muted text-muted-foreground text-sm font-medium"
+                  >
+                    {prereq}
+                  </span>
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
                 ))}
               </div>
             </div>
           )}
+<<<<<<< HEAD
           {/* Disciplinas liberadas */}
           {detail?.libera?.length > 0 && (
             <div>
@@ -177,6 +297,26 @@ export function DisciplineDetail({ code, onClose }: DisciplineDetailProps) {
                   const isAlmostFull = section.available > 0 && section.available <= 5;
                   const isAdded = sections?.some(
                     item => item.section_code === section.section_code
+=======
+
+          {/* Classes */}
+          <div>
+            <h3 className="font-semibold text-card-foreground mb-3">
+              Turmas Disponíveis ({sections.length})
+            </h3>
+            
+            {sections.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                Nenhuma turma disponível para esta disciplina no momento.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {sections.map((section) => {
+                  const isFull = section.available <= 0;
+                  const isAlmostFull = section.available > 0 && section.available <= 5;
+                  const isAdded = scheduledItems.some(
+                    item => item.disciplineCode === discipline.code && item.classCode === section.section_code
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
                   );
 
                   return (

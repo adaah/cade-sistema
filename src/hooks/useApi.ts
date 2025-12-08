@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+<<<<<<< HEAD
 import { 
   fetchPrograms, 
   fetchCourses, 
@@ -16,6 +17,9 @@ import {
   CourseDetail,
   ProgramDetail
 } from '@/services/api';
+=======
+import { fetchPrograms, fetchCourses, fetchSections, Program, Course, Section } from '@/services/api';
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
 
 export function usePrograms() {
   return useQuery<Program[], Error>({
@@ -30,6 +34,7 @@ export function useCourses() {
   return useQuery<Course[], Error>({
     queryKey: ['courses'],
     queryFn: fetchCourses,
+<<<<<<< HEAD
     staleTime: 1000 * 60 * 60, // 1 hora
     gcTime: 1000 * 60 * 60 * 24, // 24 horas
   });
@@ -43,6 +48,10 @@ export function useProgramCourses(programIdRef: string | null | undefined) {
     enabled: true,
     staleTime: 1000 * 60 * 60, // 1 hora
     gcTime: 1000 * 60 * 60 * 24, // 24 horas
+=======
+    staleTime: 1000 * 60 * 60,
+    gcTime: 1000 * 60 * 60 * 24,
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
   });
 }
 
@@ -55,6 +64,7 @@ export function useSections() {
   });
 }
 
+<<<<<<< HEAD
 // Hook para buscar detalhes de um curso específico
 export function useCourseDetail(detailUrl: string | null | undefined) {
   return useQuery<CourseDetail, Error>({
@@ -97,6 +107,18 @@ export function useCourseSections(courseCode: string | null | undefined) {
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 60,
   });
+=======
+// Hook para buscar seções de uma disciplina específica
+export function useCourseSections(courseCode: string) {
+  const { data: sections, ...rest } = useSections();
+  
+  const filteredSections = sections?.filter(s => s.course_code === courseCode) || [];
+  
+  return {
+    ...rest,
+    data: filteredSections,
+  };
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
 }
 
 // Hook para buscar disciplinas com vagas disponíveis
@@ -116,6 +138,7 @@ export function useAvailableCourses() {
     isLoading: loadingCourses || loadingSections,
   };
 }
+<<<<<<< HEAD
 
 // Hook para buscar disciplinas com contagem de turmas
 export function useCoursesWithSectionCount() {
@@ -164,3 +187,5 @@ export function useProgramCourseCodes(programIdRef: string | null | undefined) {
     gcTime: 1000 * 60 * 60 * 24,
   });
 }
+=======
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae

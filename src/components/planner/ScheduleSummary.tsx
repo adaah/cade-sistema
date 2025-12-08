@@ -1,10 +1,18 @@
 import { useApp } from '@/contexts/AppContext';
 import { Clock, BookOpen, Trash2 } from 'lucide-react';
+<<<<<<< HEAD
 import { useCourses } from '@/hooks/useApi';
 
 export function ScheduleSummary() {
   const { scheduledItems, removeFromSchedule, clearSchedule } = useApp();
   const { data: courses } = useCourses();
+=======
+import { disciplines } from '@/data/mockData';
+import { cn } from '@/lib/utils';
+
+export function ScheduleSummary() {
+  const { scheduledItems, removeFromSchedule, clearSchedule } = useApp();
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
 
   // Get unique disciplines
   const uniqueDisciplines = scheduledItems.reduce((acc, item) => {
@@ -17,12 +25,20 @@ export function ScheduleSummary() {
 
   // Calculate totals
   const totalCredits = uniqueDisciplines.reduce((sum, item) => {
+<<<<<<< HEAD
     const discipline = courses?.find(d => d.code === item.disciplineCode);
+=======
+    const discipline = disciplines.find(d => d.code === item.disciplineCode);
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
     return sum + (discipline?.credits || 0);
   }, 0);
 
   const totalWorkload = uniqueDisciplines.reduce((sum, item) => {
+<<<<<<< HEAD
     const discipline = courses?.find(d => d.code === item.disciplineCode);
+=======
+    const discipline = disciplines.find(d => d.code === item.disciplineCode);
+>>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
     return sum + (discipline?.workload || 0);
   }, 0);
 
