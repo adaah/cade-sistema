@@ -4,10 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppProvider, useApp } from "./contexts/AppContext";
-<<<<<<< HEAD
 import { DeepFetchProvider } from "./components/DeepFetchProvider";
-=======
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
 import { Onboarding } from "./components/onboarding/Onboarding";
 import Index from "./pages/Index";
 import Disciplinas from "./pages/Disciplinas";
@@ -18,8 +15,8 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 30, // 30 minutes
-      gcTime: 1000 * 60 * 60, // 1 hour
+      staleTime: 1000 * 60 * 30,
+      gcTime: 1000 * 60 * 60,
       retry: 2,
       refetchOnWindowFocus: false,
     },
@@ -49,7 +46,6 @@ function AppContent() {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AppProvider>
-<<<<<<< HEAD
       <DeepFetchProvider>
         <TooltipProvider>
           <Toaster />
@@ -57,13 +53,6 @@ const App = () => (
           <AppContent />
         </TooltipProvider>
       </DeepFetchProvider>
-=======
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <AppContent />
-      </TooltipProvider>
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
     </AppProvider>
   </QueryClientProvider>
 );

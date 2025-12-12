@@ -1,20 +1,11 @@
 import { useApp } from '@/contexts/AppContext';
 import { Clock, BookOpen, Trash2 } from 'lucide-react';
-<<<<<<< HEAD
 import { useCourses } from '@/hooks/useApi';
 
 export function ScheduleSummary() {
   const { scheduledItems, removeFromSchedule, clearSchedule } = useApp();
   const { data: courses } = useCourses();
-=======
-import { disciplines } from '@/data/mockData';
-import { cn } from '@/lib/utils';
 
-export function ScheduleSummary() {
-  const { scheduledItems, removeFromSchedule, clearSchedule } = useApp();
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
-
-  // Get unique disciplines
   const uniqueDisciplines = scheduledItems.reduce((acc, item) => {
     const key = `${item.disciplineCode}-${item.classCode}`;
     if (!acc.find(d => `${d.disciplineCode}-${d.classCode}` === key)) {
@@ -23,22 +14,13 @@ export function ScheduleSummary() {
     return acc;
   }, [] as typeof scheduledItems);
 
-  // Calculate totals
   const totalCredits = uniqueDisciplines.reduce((sum, item) => {
-<<<<<<< HEAD
     const discipline = courses?.find(d => d.code === item.disciplineCode);
-=======
-    const discipline = disciplines.find(d => d.code === item.disciplineCode);
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
     return sum + (discipline?.credits || 0);
   }, 0);
 
   const totalWorkload = uniqueDisciplines.reduce((sum, item) => {
-<<<<<<< HEAD
     const discipline = courses?.find(d => d.code === item.disciplineCode);
-=======
-    const discipline = disciplines.find(d => d.code === item.disciplineCode);
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
     return sum + (discipline?.workload || 0);
   }, 0);
 
@@ -68,7 +50,6 @@ export function ScheduleSummary() {
         </button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-muted rounded-lg p-3">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -86,7 +67,6 @@ export function ScheduleSummary() {
         </div>
       </div>
 
-      {/* List */}
       <div className="space-y-2">
         {uniqueDisciplines.map((item) => (
           <div
@@ -95,7 +75,7 @@ export function ScheduleSummary() {
           >
             <div
               className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ backgroundColor: item.color }}
+              style={{ backgroundColor: item.color || '#3b82f6' }}
             />
             <div className="flex-1 min-w-0">
               <p className="font-medium text-card-foreground text-sm truncate">

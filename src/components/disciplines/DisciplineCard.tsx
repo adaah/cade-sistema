@@ -22,7 +22,6 @@ export function DisciplineCard({ discipline, onClick }: DisciplineCardProps) {
       )}
       onClick={onClick}
     >
-      {/* Badge */}
       <div className="flex items-start justify-between mb-3">
         <span className={cn(
           "px-3 py-1 rounded-lg text-sm font-semibold",
@@ -49,12 +48,10 @@ export function DisciplineCard({ discipline, onClick }: DisciplineCardProps) {
         </button>
       </div>
 
-      {/* Title */}
       <h3 className="font-semibold text-card-foreground mb-2 line-clamp-2">
         {discipline.name}
       </h3>
 
-      {/* Meta */}
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
         <div className="flex items-center gap-1">
           <Clock className="w-4 h-4" />
@@ -63,8 +60,6 @@ export function DisciplineCard({ discipline, onClick }: DisciplineCardProps) {
         <span>{discipline.credits} créditos</span>
       </div>
 
-      {/* Semester indicator */}
-<<<<<<< HEAD
       {discipline.semester && (
         <div className="mt-3 pt-3 border-t border-border">
           <span className="text-xs text-muted-foreground">
@@ -72,15 +67,7 @@ export function DisciplineCard({ discipline, onClick }: DisciplineCardProps) {
           </span>
         </div>
       )}
-=======
-      <div className="mt-3 pt-3 border-t border-border">
-        <span className="text-xs text-muted-foreground">
-          {discipline.semester}º Semestre
-        </span>
-      </div>
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
 
-      {/* Completed overlay */}
       {isCompleted && (
         <div className="absolute top-3 right-12 px-2 py-1 bg-success rounded-md text-xs font-medium text-success-foreground">
           Cursada
