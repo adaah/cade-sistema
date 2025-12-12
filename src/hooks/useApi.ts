@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-<<<<<<< HEAD
 import { 
   fetchPrograms, 
   fetchCourses, 
@@ -17,16 +16,13 @@ import {
   CourseDetail,
   ProgramDetail
 } from '@/services/api';
-=======
-import { fetchPrograms, fetchCourses, fetchSections, Program, Course, Section } from '@/services/api';
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
 
 export function usePrograms() {
   return useQuery<Program[], Error>({
     queryKey: ['programs'],
     queryFn: fetchPrograms,
-    staleTime: 1000 * 60 * 60, // 1 hora
-    gcTime: 1000 * 60 * 60 * 24, // 24 horas
+    staleTime: 1000 * 60 * 60,
+    gcTime: 1000 * 60 * 60 * 24,
   });
 }
 
@@ -34,24 +30,18 @@ export function useCourses() {
   return useQuery<Course[], Error>({
     queryKey: ['courses'],
     queryFn: fetchCourses,
-<<<<<<< HEAD
-    staleTime: 1000 * 60 * 60, // 1 hora
-    gcTime: 1000 * 60 * 60 * 24, // 24 horas
+    staleTime: 1000 * 60 * 60,
+    gcTime: 1000 * 60 * 60 * 24,
   });
 }
 
-// Hook para buscar cursos já filtrados pelo programa selecionado
 export function useProgramCourses(programIdRef: string | null | undefined) {
   return useQuery<Course[], Error>({
     queryKey: ['program-courses', programIdRef],
     queryFn: () => programIdRef ? fetchCoursesForProgram(programIdRef) : fetchCourses(),
     enabled: true,
-    staleTime: 1000 * 60 * 60, // 1 hora
-    gcTime: 1000 * 60 * 60 * 24, // 24 horas
-=======
     staleTime: 1000 * 60 * 60,
     gcTime: 1000 * 60 * 60 * 24,
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
   });
 }
 
@@ -59,13 +49,11 @@ export function useSections() {
   return useQuery<Section[], Error>({
     queryKey: ['sections'],
     queryFn: fetchSections,
-    staleTime: 1000 * 60 * 30, // 30 min
-    gcTime: 1000 * 60 * 60 * 12, // 12 horas
+    staleTime: 1000 * 60 * 30,
+    gcTime: 1000 * 60 * 60 * 12,
   });
 }
 
-<<<<<<< HEAD
-// Hook para buscar detalhes de um curso específico
 export function useCourseDetail(detailUrl: string | null | undefined) {
   return useQuery<CourseDetail, Error>({
     queryKey: ['course-detail', detailUrl],
@@ -76,7 +64,6 @@ export function useCourseDetail(detailUrl: string | null | undefined) {
   });
 }
 
-// Hook para buscar curso por código
 export function useCourseByCode(code: string | null | undefined) {
   return useQuery<CourseDetail, Error>({
     queryKey: ['course-by-code', code],
@@ -87,18 +74,16 @@ export function useCourseByCode(code: string | null | undefined) {
   });
 }
 
-// Hook para buscar seções de um curso específico usando sections_url
 export function useCourseSectionsByUrl(sectionsUrl: string | null | undefined) {
   return useQuery<Section[], Error>({
     queryKey: ['course-sections', sectionsUrl],
     queryFn: () => sectionsUrl ? fetchCourseSections(sectionsUrl) : Promise.reject(new Error('URL não fornecida')),
     enabled: !!sectionsUrl,
-    staleTime: 1000 * 60 * 5, // 5 minutos (seções mudam mais frequentemente)
+    staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 60,
   });
 }
 
-// Hook para buscar seções de uma disciplina específica (por código)
 export function useCourseSections(courseCode: string | null | undefined) {
   return useQuery<Section[], Error>({
     queryKey: ['course-sections-by-code', courseCode],
@@ -107,21 +92,8 @@ export function useCourseSections(courseCode: string | null | undefined) {
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 60,
   });
-=======
-// Hook para buscar seções de uma disciplina específica
-export function useCourseSections(courseCode: string) {
-  const { data: sections, ...rest } = useSections();
-  
-  const filteredSections = sections?.filter(s => s.course_code === courseCode) || [];
-  
-  return {
-    ...rest,
-    data: filteredSections,
-  };
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
 }
 
-// Hook para buscar disciplinas com vagas disponíveis
 export function useAvailableCourses() {
   const { data: courses, isLoading: loadingCourses } = useCourses();
   const { data: sections, isLoading: loadingSections } = useSections();
@@ -138,9 +110,7 @@ export function useAvailableCourses() {
     isLoading: loadingCourses || loadingSections,
   };
 }
-<<<<<<< HEAD
 
-// Hook para buscar disciplinas com contagem de turmas
 export function useCoursesWithSectionCount() {
   const { data: courses, isLoading: loadingCourses } = useCourses();
   const { data: sections, isLoading: loadingSections } = useSections();
@@ -166,7 +136,6 @@ export function useCoursesWithSectionCount() {
   };
 }
 
-// Hook para buscar detalhes do programa
 export function useProgramDetail(detailUrl: string | null | undefined) {
   return useQuery<ProgramDetail, Error>({
     queryKey: ['program-detail', detailUrl],
@@ -177,7 +146,6 @@ export function useProgramDetail(detailUrl: string | null | undefined) {
   });
 }
 
-// Hook para buscar códigos das disciplinas de um programa
 export function useProgramCourseCodes(programIdRef: string | null | undefined) {
   return useQuery<string[], Error>({
     queryKey: ['program-course-codes', programIdRef],
@@ -187,5 +155,3 @@ export function useProgramCourseCodes(programIdRef: string | null | undefined) {
     gcTime: 1000 * 60 * 60 * 24,
   });
 }
-=======
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae

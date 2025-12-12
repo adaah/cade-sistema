@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { Home, BookOpen, Calendar, MoreHorizontal } from 'lucide-react';
-=======
-import { Home, BookOpen, Calendar, GitBranch, MoreHorizontal } from 'lucide-react';
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
 import { NavLink } from '@/components/NavLink';
 import { cn } from '@/lib/utils';
 
@@ -10,10 +6,6 @@ const menuItems = [
   { title: 'Início', url: '/', icon: Home },
   { title: 'Disciplinas', url: '/disciplinas', icon: BookOpen },
   { title: 'Planejador', url: '/planejador', icon: Calendar },
-<<<<<<< HEAD
-=======
-  { title: 'Fluxograma', url: '/fluxograma', icon: GitBranch },
->>>>>>> a397210beb9a30ba0d5df243336fa4bc022922ae
   { title: 'Mais', url: '/configuracoes', icon: MoreHorizontal },
 ];
 
