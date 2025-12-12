@@ -1,13 +1,29 @@
 import { z } from 'zod';
 import { getCachedData } from './deepFetch';
 
-const API_BASE_URL = 'https://FormigTeen.github.io/sigaa-static/api/v1';
+// Use proxy in development to avoid CORS, direct URL in production
+const API_BASE_URL = '/sigaa-api';
+const EXTERNAL_API_BASE = 'https://FormigTeen.github.io/sigaa-static/api/v1';
 
 const cache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_DURATION = 1000 * 60 * 5;
 
+// Convert external URLs to use proxy
+function toProxyUrl(url: string): string {
+  if (url.startsWith(EXTERNAL_API_BASE)) {
+    return url.replace(EXTERNAL_API_BASE, API_BASE_URL);
+  }
+  if (url.startsWith('https://FormigTeen.github.io/sigaa-static/api/v1')) {
+    return url.replace('https://FormigTeen.github.io/sigaa-static/api/v1', API_BASE_URL);
+  }
+  return url;
+}
+
 async function fetchWithCache<T>(url: string, schema: z.ZodSchema<T>): Promise<T> {
-  const deepFetchCached = getCachedData(url);
+  const proxyUrl = toProxyUrl(url);
+  
+  // Check deepFetch cache first (using original URL as key)
+  const deepFetchCached = getCachedData(url) || getCachedData(proxyUrl);
   if (deepFetchCached) {
     try {
       const parsed = schema.parse(deepFetchCached);
@@ -18,14 +34,17 @@ async function fetchWithCache<T>(url: string, schema: z.ZodSchema<T>): Promise<T
     }
   }
 
+  // Check local cache
   const cached = cache.get(url);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     return cached.data as T;
   }
 
-  const response = await fetch(url);
+  // Fetch using proxy URL
+  console.log(`Fetching: ${proxyUrl}`);
+  const response = await fetch(proxyUrl);
   if (!response.ok) {
-    throw new Error(`Failed to load data from ${url}`);
+    throw new Error(`Failed to load data from ${proxyUrl}`);
   }
   const data = await response.json();
   const parsed = schema.parse(data);

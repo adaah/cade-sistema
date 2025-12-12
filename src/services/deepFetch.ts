@@ -5,7 +5,19 @@
  * seguindo cada URL até encontrar todos os dados relacionados antes de exibir para o usuário.
  */
 
-const API_BASE_URL = 'https://FormigTeen.github.io/sigaa-static/api/v1';
+const EXTERNAL_API_BASE = 'https://FormigTeen.github.io/sigaa-static/api/v1';
+const API_BASE_URL = '/sigaa-api';
+
+// Converte URL externa para usar proxy
+function toProxyUrl(url: string): string {
+  if (url.startsWith(EXTERNAL_API_BASE)) {
+    return url.replace(EXTERNAL_API_BASE, API_BASE_URL);
+  }
+  if (url.startsWith('https://FormigTeen.github.io/sigaa-static/api/v1')) {
+    return url.replace('https://FormigTeen.github.io/sigaa-static/api/v1', API_BASE_URL);
+  }
+  return url;
+}
 
 // Cache global para evitar requisições duplicadas
 const globalCache = new Map<string, { data: any; timestamp: number }>();
@@ -146,33 +158,36 @@ function extractUrls(obj: any, baseUrl: string = API_BASE_URL): string[] {
  * Busca um JSON de uma URL com cache
  */
 async function fetchJson(url: string): Promise<any> {
-  // Verificar cache
-  const cached = globalCache.get(url);
+  const proxyUrl = toProxyUrl(url);
+  
+  // Verificar cache (usando URL original como chave)
+  const cached = globalCache.get(url) || globalCache.get(proxyUrl);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     return cached.data;
   }
 
   // Se já foi processado nesta sessão, retornar do cache ou fazer nova requisição
-  if (processedUrls.has(url)) {
+  if (processedUrls.has(url) || processedUrls.has(proxyUrl)) {
     if (cached) return cached.data;
   }
 
   try {
-    const response = await fetch(url);
+    console.log(`Deep fetch: ${proxyUrl}`);
+    const response = await fetch(proxyUrl);
     if (!response.ok) {
-      console.warn(`Falha ao carregar ${url}: ${response.statusText}`);
+      console.warn(`Falha ao carregar ${proxyUrl}: ${response.statusText}`);
       return null;
     }
 
     const data = await response.json();
     
-    // Armazenar no cache
+    // Armazenar no cache (usando URL original como chave)
     globalCache.set(url, { data, timestamp: Date.now() });
     processedUrls.add(url);
 
     return data;
   } catch (error) {
-    console.warn(`Erro ao buscar ${url}:`, error);
+    console.warn(`Erro ao buscar ${proxyUrl}:`, error);
     return null;
   }
 }
