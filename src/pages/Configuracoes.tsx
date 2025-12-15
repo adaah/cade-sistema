@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useApp } from '@/contexts/AppContext';
-import { usePrograms } from '@/hooks/useApi';
+import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { Sun, Moon, Trash2, RotateCcw, User, Download, Upload, Check } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -9,8 +9,6 @@ const Configuracoes = () => {
   const { 
     theme, 
     toggleTheme, 
-    selectedCourse, 
-    setSelectedCourse,
     setIsOnboarded,
     clearSchedule,
     completedDisciplines,
@@ -18,11 +16,11 @@ const Configuracoes = () => {
     importSettings
   } = useApp();
   
-  const { data: programs } = usePrograms();
+  const { myPrograms, clearPrograms } = useMyPrograms();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importSuccess, setImportSuccess] = useState(false);
 
-  const currentProgram = programs?.find(p => p.id_ref === selectedCourse);
+  const currentProgram = myPrograms.find(Boolean);
 
   const handleResetAll = () => {
     if (confirm('Tem certeza que deseja resetar todos os dados? Esta ação não pode ser desfeita.')) {
@@ -41,7 +39,7 @@ const Configuracoes = () => {
 
   const handleChangeCourse = () => {
     setIsOnboarded(false);
-    setSelectedCourse(null);
+    clearPrograms();
   };
 
   const handleExport = () => {

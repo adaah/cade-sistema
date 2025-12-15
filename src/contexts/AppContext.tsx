@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, ReactNode } from 'react';
+import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { atomWithStorage } from 'jotai/utils';
 
 interface ScheduleItem {
   disciplineCode: string;
@@ -13,15 +15,12 @@ interface ScheduleItem {
 }
 
 interface AppSettings {
-  selectedCourse: string | null;
   completedDisciplines: string[];
   scheduledItems: ScheduleItem[];
   isOnboarded: boolean;
 }
 
 interface AppContextType {
-  selectedCourse: string | null;
-  setSelectedCourse: (course: string | null) => void;
   completedDisciplines: string[];
   toggleCompletedDiscipline: (code: string) => void;
   scheduledItems: ScheduleItem[];
@@ -49,113 +48,108 @@ const COLORS = [
   'hsl(45, 93%, 47%)',    // Yellow
 ];
 
+// Atoms with storage (persisted in localStorage)
+const completedDisciplinesAtom = atomWithStorage<string[]>('completedDisciplines', []);
+const scheduledItemsAtom = atomWithStorage<ScheduleItem[]>('scheduledItems', []);
+const themeAtom = atomWithStorage<'light' | 'dark'>('theme', 'light');
+const onboardedAtom = atomWithStorage<boolean>('isOnboarded', false);
+
+// Derived write atoms for actions
+const toggleCompletedDisciplineAtom = atom(null, (get, set, code: string) => {
+  const prev = get(completedDisciplinesAtom);
+  const next = prev.includes(code)
+    ? prev.filter((c) => c !== code)
+    : [...prev, code];
+  set(completedDisciplinesAtom, next);
+});
+
+const addToScheduleAtom = atom(null, (get, set, item: ScheduleItem) => {
+  const current = get(scheduledItemsAtom);
+
+  // Use consistent color per discipline, assign new if needed
+  const existingForDiscipline = current.find(
+    (s) => s.disciplineCode === item.disciplineCode
+  );
+  const colorBaseCount = current.filter((s, i, arr) =>
+    arr.findIndex((x) => x.disciplineCode === s.disciplineCode) === i
+  ).length;
+
+  const color = existingForDiscipline
+    ? existingForDiscipline.color
+    : COLORS[colorBaseCount % COLORS.length];
+
+  const itemWithColor: ScheduleItem = { ...item, color: item.color || color };
+  set(scheduledItemsAtom, [...current, itemWithColor]);
+});
+
+const removeFromScheduleAtom = atom(
+  null,
+  (get, set, disciplineCode: string, classCode: string) => {
+    const current = get(scheduledItemsAtom);
+    set(
+      scheduledItemsAtom,
+      current.filter(
+        (item) => !(item.disciplineCode === disciplineCode && item.classCode === classCode)
+      )
+    );
+  }
+);
+
+const clearScheduleAtom = atom(null, (_get, set) => {
+  set(scheduledItemsAtom, []);
+});
+
+const toggleThemeAtom = atom(null, (get, set) => {
+  const current = get(themeAtom);
+  set(themeAtom, current === 'light' ? 'dark' : 'light');
+});
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [selectedCourse, setSelectedCourse] = useState<string | null>(() => {
-    return localStorage.getItem('selectedCourse');
-  });
-  
-  const [completedDisciplines, setCompletedDisciplines] = useState<string[]>(() => {
-    const saved = localStorage.getItem('completedDisciplines');
-    return saved ? JSON.parse(saved) : [];
-  });
-  
-  const [scheduledItems, setScheduledItems] = useState<ScheduleItem[]>(() => {
-    const saved = localStorage.getItem('scheduledItems');
-    return saved ? JSON.parse(saved) : [];
-  });
-  
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('theme');
-    return (saved as 'light' | 'dark') || 'light';
-  });
+  const [theme] = useAtom(themeAtom);
 
-  const [isOnboarded, setIsOnboarded] = useState<boolean>(() => {
-    return localStorage.getItem('isOnboarded') === 'true';
-  });
-
+  // Sync DOM class with theme
   useEffect(() => {
-    if (selectedCourse) {
-      localStorage.setItem('selectedCourse', selectedCourse);
-    }
-  }, [selectedCourse]);
-
-  useEffect(() => {
-    localStorage.setItem('completedDisciplines', JSON.stringify(completedDisciplines));
-  }, [completedDisciplines]);
-
-  useEffect(() => {
-    localStorage.setItem('scheduledItems', JSON.stringify(scheduledItems));
-  }, [scheduledItems]);
-
-  useEffect(() => {
-    localStorage.setItem('theme', theme);
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  useEffect(() => {
-    localStorage.setItem('isOnboarded', String(isOnboarded));
-  }, [isOnboarded]);
+  const completedDisciplines = useAtomValue(completedDisciplinesAtom);
+  const setCompletedDisciplines = useSetAtom(completedDisciplinesAtom);
+  const toggleCompletedDiscipline = useSetAtom(toggleCompletedDisciplineAtom);
 
-  const toggleCompletedDiscipline = (code: string) => {
-    setCompletedDisciplines(prev => 
-      prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code]
-    );
-  };
+  const scheduledItems = useAtomValue(scheduledItemsAtom);
+  const setScheduledItems = useSetAtom(scheduledItemsAtom);
+  const addToSchedule = useSetAtom(addToScheduleAtom);
+  const removeFromSchedule = useSetAtom(removeFromScheduleAtom);
+  const clearSchedule = useSetAtom(clearScheduleAtom);
 
-  const addToSchedule = (item: ScheduleItem) => {
-    const colorIndex = scheduledItems.filter((s, i, arr) => 
-      arr.findIndex(x => x.disciplineCode === s.disciplineCode) === i
-    ).length;
-    
-    const itemWithColor = {
-      ...item,
-      color: item.color || COLORS[colorIndex % COLORS.length]
-    };
-    
-    setScheduledItems(prev => [...prev, itemWithColor]);
-  };
+  const toggleTheme = useSetAtom(toggleThemeAtom);
 
-  const removeFromSchedule = (disciplineCode: string, classCode: string) => {
-    setScheduledItems(prev => 
-      prev.filter(item => !(item.disciplineCode === disciplineCode && item.classCode === classCode))
-    );
-  };
-
-  const clearSchedule = () => {
-    setScheduledItems([]);
-  };
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
+  const isOnboarded = useAtomValue(onboardedAtom);
+  const setIsOnboarded = useSetAtom(onboardedAtom);
 
   const exportSettings = (): string => {
     const settings: AppSettings = {
-      selectedCourse,
       completedDisciplines,
       scheduledItems,
-      isOnboarded
+      isOnboarded,
     };
     return JSON.stringify(settings, null, 2);
   };
 
   const importSettings = (json: string): boolean => {
     try {
-      const settings = JSON.parse(json) as AppSettings;
-      
-      if (settings.selectedCourse !== undefined) {
-        setSelectedCourse(settings.selectedCourse);
-      }
-      if (Array.isArray(settings.completedDisciplines)) {
+      const settings = JSON.parse(json) as Partial<AppSettings & { selectedCourse?: string | null }>;
+      if (Array.isArray(settings.completedDisciplines))
         setCompletedDisciplines(settings.completedDisciplines);
-      }
-      if (Array.isArray(settings.scheduledItems)) {
+      if (Array.isArray(settings.scheduledItems))
         setScheduledItems(settings.scheduledItems);
+      if (settings.isOnboarded !== undefined) setIsOnboarded(settings.isOnboarded);
+      // Legacy support: if a previous export had selectedCourse, migrate it to localStorage
+      if (settings.selectedCourse) {
+        try {
+          localStorage.setItem('selectedPrograms', JSON.stringify([settings.selectedCourse]));
+        } catch {}
       }
-      if (settings.isOnboarded !== undefined) {
-        setIsOnboarded(settings.isOnboarded);
-      }
-      
       return true;
     } catch {
       return false;
@@ -163,22 +157,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AppContext.Provider value={{
-      selectedCourse,
-      setSelectedCourse,
-      completedDisciplines,
-      toggleCompletedDiscipline,
-      scheduledItems,
-      addToSchedule,
-      removeFromSchedule,
-      clearSchedule,
-      theme,
-      toggleTheme,
-      isOnboarded,
-      setIsOnboarded,
-      exportSettings,
-      importSettings
-    }}>
+    <AppContext.Provider
+      value={{
+        completedDisciplines,
+        toggleCompletedDiscipline,
+        scheduledItems,
+        addToSchedule,
+        removeFromSchedule,
+        clearSchedule,
+        theme,
+        toggleTheme,
+        isOnboarded,
+        setIsOnboarded,
+        exportSettings,
+        importSettings,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );

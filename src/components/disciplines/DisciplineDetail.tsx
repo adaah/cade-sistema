@@ -1,17 +1,19 @@
 import { X, Clock, Users, MapPin, Plus, AlertCircle, Check } from 'lucide-react';
-import { Course, Section, parseSigaaSchedule } from '@/services/api';
+import { Course, parseSigaaSchedule } from '@/services/api';
+import type { Section } from '@/services/api';
+import { useCourseSections } from '@/hooks/useApi';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 
 interface DisciplineDetailProps {
   discipline: Course;
-  sections: Section[];
   onClose: () => void;
 }
 
-export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDetailProps) {
+export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps) {
   const { scheduledItems, addToSchedule, completedDisciplines, toggleCompletedDiscipline } = useApp();
+  const { data: sections = [], isLoading } = useCourseSections(discipline?.code);
 
   const handleAddClass = (section: Section) => {
     const isAlreadyAdded = scheduledItems.some(
@@ -137,9 +139,9 @@ export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDe
             <div>
               <h3 className="font-semibold text-card-foreground mb-2">Pré-requisitos</h3>
               <div className="flex flex-wrap gap-2">
-                {discipline.prerequisites?.map(prereq => (
+                {discipline.prerequisites?.map((prereq, idx) => (
                   <span
-                    key={prereq}
+                    key={`${prereq}-${idx}`}
                     className="px-3 py-1 rounded-lg bg-muted text-muted-foreground text-sm font-medium"
                   >
                     {prereq}
@@ -153,14 +155,29 @@ export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDe
             <h3 className="font-semibold text-card-foreground mb-3">
               Turmas Disponíveis ({sections.length})
             </h3>
-            
-            {sections.length === 0 ? (
+
+            {isLoading ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="p-4 rounded-xl border-2 border-border bg-muted/50 animate-pulse">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 w-40 bg-muted rounded" />
+                        <div className="h-3 w-48 bg-muted rounded" />
+                        <div className="h-3 w-32 bg-muted rounded" />
+                      </div>
+                      <div className="h-9 w-24 bg-muted rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : sections.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 Nenhuma turma disponível para esta disciplina no momento.
               </p>
             ) : (
               <div className="space-y-3">
-                {sections.map((section) => {
+                {sections.map((section, idx) => {
                   const isFull = section.available <= 0;
                   const isAlmostFull = section.available > 0 && section.available <= 5;
                   const isAdded = scheduledItems.some(
@@ -169,7 +186,7 @@ export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDe
 
                   return (
                     <div
-                      key={section.section_code}
+                      key={`${section.course_code || discipline.code}-${section.section_code || idx}`}
                       className={cn(
                         "p-4 rounded-xl border-2 transition-all",
                         isFull ? "border-destructive/50 bg-destructive/5" :
