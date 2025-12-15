@@ -53,10 +53,7 @@ const Planejador = () => {
     });
   }, [courses, sections, search, periodFilter]);
 
-  const selectedSections = useMemo(() => {
-    if (!selectedDiscipline || !sections) return [];
-    return sections.filter(s => s.course_code === selectedDiscipline.code);
-  }, [selectedDiscipline, sections]);
+  // Sections para a disciplina selecionada serão carregadas pelo DisciplineDetail
 
   const getCourseStats = (courseCode: string) => {
     const courseSections = sections?.filter(s => s.course_code === courseCode) || [];
@@ -167,7 +164,6 @@ const Planejador = () => {
         {selectedDiscipline && (
           <DisciplineDetail
             discipline={selectedDiscipline}
-            sections={selectedSections}
             onClose={() => setSelectedDiscipline(null)}
           />
         )}

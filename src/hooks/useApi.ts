@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { 
   fetchPrograms, 
   fetchCourses, 
@@ -18,12 +18,14 @@ import {
 } from '@/services/api';
 
 export function usePrograms() {
-  return useQuery<Program[], Error>({
+  const result = useQuery<Program[], Error>({
     queryKey: ['programs'],
     queryFn: fetchPrograms,
     staleTime: 1000 * 60 * 60,
     gcTime: 1000 * 60 * 60 * 24,
   });
+  const programs = result.data || [];
+  return { ...result, data: programs };
 }
 
 export function useCourses() {
@@ -36,12 +38,22 @@ export function useCourses() {
 }
 
 export function useProgramCourses(programIdRef: string | null | undefined) {
-  return useQuery<Course[], Error>({
-    queryKey: ['program-courses', programIdRef],
-    queryFn: () => programIdRef ? fetchCoursesForProgram(programIdRef) : fetchCourses(),
-    enabled: true,
-    staleTime: 1000 * 60 * 60,
-    gcTime: 1000 * 60 * 60 * 24,
+  return useQuery<Course[], Error>(getProgramCourseQuery(programIdRef));
+}
+
+// Reusable query config for program courses
+export const getProgramCourseQuery = (programIdRef: string | null | undefined) => ({
+  queryKey: ['program-courses', programIdRef] as const,
+  queryFn: () => (programIdRef ? fetchCoursesForProgram(programIdRef) : fetchCourses()),
+  enabled: true,
+  staleTime: 1000 * 60 * 60,
+  gcTime: 1000 * 60 * 60 * 24,
+});
+
+// Alias for a batch of program course queries
+export function useProgramCoursesBatch(programIds: Array<string | null | undefined>) {
+  return useQueries({
+    queries: programIds.map((id) => getProgramCourseQuery(id)),
   });
 }
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDeepFetch } from '@/hooks/useDeepFetch';
 import { DeepFetchProgress } from './DeepFetchProgress';
-import { useApp } from '@/contexts/AppContext';
+import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { fetchCoursesIndex, fetchPrograms, getProgramCourseCodes } from '@/services/api';
 import { hydrateDeepFetch } from '@/services/deepFetch';
 
@@ -16,7 +16,8 @@ const LAST_PROGRAM_KEY = 'deepfetch.lastProgram';
  * - Mantém o último resultado persistido para não refazer a busca
  */
 export function DeepFetchProvider({ children }: { children: React.ReactNode }) {
-  const { selectedCourse } = useApp();
+  const { myPrograms } = useMyPrograms();
+  const selectedCourse = myPrograms.find(Boolean)?.id_ref || null;
   const { progress, fetchAll, clearCache } = useDeepFetch();
 
   const [showProgress, setShowProgress] = useState(false);
@@ -129,4 +130,3 @@ export function DeepFetchProvider({ children }: { children: React.ReactNode }) {
     </>
   );
 }
-

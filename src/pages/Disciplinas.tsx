@@ -5,28 +5,24 @@ import { DisciplineCard } from '@/components/disciplines/DisciplineCard';
 import { DisciplineDetail } from '@/components/disciplines/DisciplineDetail';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { useApp } from '@/contexts/AppContext';
-import { useCourses, usePrograms, useProgramCourses, useSections } from '@/hooks/useApi';
+import { useSections } from '@/hooks/useApi';
+import { useMyCourses } from '@/hooks/useMyCourses';
+import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { Course } from '@/services/api';
 import { cn } from '@/lib/utils';
 
 const Disciplinas = () => {
-  const { selectedCourse, completedDisciplines, toggleCompletedDiscipline } = useApp();
-  const { data: programs } = usePrograms();
-  const { data: programCourses, isLoading: loadingProgramCourses } = useProgramCourses(selectedCourse);
-  const { data: allCourses, isLoading: loadingAllCourses } = useCourses();
-  const { data: sections } = useSections();
-  
-  const selectedProgram = programs?.find(p => p.id_ref === selectedCourse);
+  const { completedDisciplines, toggleCompletedDiscipline } = useApp();
+  const { myPrograms } = useMyPrograms();
+  const currentProgram = myPrograms.find(Boolean);
+  const { courses, isLoading } = useMyCourses();
+
+  const selectedProgram = myPrograms.find(Boolean);
   
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [activeSemester, setActiveSemester] = useState<number | null>(null);
   const [selectedDiscipline, setSelectedDiscipline] = useState<Course | null>(null);
-
-  const courses = useMemo(() => {
-    if (selectedCourse && programCourses) return programCourses;
-    return allCourses || [];
-  }, [allCourses, programCourses, selectedCourse]);
 
   const coursesBySemester = useMemo(() => {
     const grouped: Record<number, Course[]> = {};
@@ -48,10 +44,7 @@ const Disciplinas = () => {
     return prerequisites.every(prereq => completedDisciplines.includes(prereq));
   };
 
-  const selectedSections = useMemo(() => {
-    if (!selectedDiscipline || !sections) return [];
-    return sections.filter(s => s.course_code === selectedDiscipline.code);
-  }, [selectedDiscipline, sections]);
+  // Sections são carregadas internamente pelo DisciplineDetail
 
   const filters = [
     { id: 'all', label: 'Todas' },
@@ -60,8 +53,6 @@ const Disciplinas = () => {
     { id: 'completed', label: 'Cursadas' },
     { id: 'available', label: 'Disponíveis' },
   ];
-
-  const isLoading = loadingProgramCourses || loadingAllCourses;
 
   return (
     <MainLayout>
@@ -213,7 +204,6 @@ const Disciplinas = () => {
         {selectedDiscipline && (
           <DisciplineDetail
             discipline={selectedDiscipline}
-            sections={selectedSections}
             onClose={() => setSelectedDiscipline(null)}
           />
         )}

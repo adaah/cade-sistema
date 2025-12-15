@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Check, GraduationCap, Search, Loader2 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { usePrograms } from '@/hooks/useApi';
+import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { cn } from '@/lib/utils';
 
 export function Onboarding() {
-  const { setSelectedCourse, setIsOnboarded } = useApp();
+  const { setIsOnboarded } = useApp();
+  const { setSelectedPrograms } = useMyPrograms();
   const { data: programs, isLoading, error } = usePrograms();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
@@ -18,7 +20,7 @@ export function Onboarding() {
 
   const handleSubmit = () => {
     if (selected) {
-      setSelectedCourse(selected);
+      setSelectedPrograms([selected]);
       setIsOnboarded(true);
     }
   };

@@ -314,10 +314,12 @@ export async function fetchCourseByCode(code: string): Promise<CourseDetail> {
 }
 
 export async function fetchCourseSections(sectionsUrl: string): Promise<Section[]> {
-  const sectionsApi = await fetchWithCache(
-    sectionsUrl,
-    z.array(SectionApiSchema)
-  );
+  const raw = await fetchWithCache(sectionsUrl, z.any());
+  const sectionsApi = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as any)?.sections)
+      ? (raw as any).sections
+      : [];
 
   return sectionsApi.map((sectionApi) => ({
     course_code: sectionApi.course_code,
