@@ -106,48 +106,6 @@ export function useCourseSections(courseCode: string | null | undefined) {
   });
 }
 
-export function useAvailableCourses() {
-  const { data: courses, isLoading: loadingCourses } = useCourses();
-  const { data: sections, isLoading: loadingSections } = useSections();
-
-  const coursesWithSections = courses?.filter(course => 
-    sections?.some(section => 
-      section.course_code === course.code && section.available > 0
-    )
-  ) || [];
-
-  return {
-    data: coursesWithSections,
-    sections: sections || [],
-    isLoading: loadingCourses || loadingSections,
-  };
-}
-
-export function useCoursesWithSectionCount() {
-  const { data: courses, isLoading: loadingCourses } = useCourses();
-  const { data: sections, isLoading: loadingSections } = useSections();
-
-  const coursesWithCounts = courses?.map(course => {
-    const courseSections = sections?.filter(s => s.course_code === course.code) || [];
-    const totalSlots = courseSections.reduce((sum, s) => sum + s.slots, 0);
-    const totalEnrolled = courseSections.reduce((sum, s) => sum + s.enrolled, 0);
-    const totalAvailable = courseSections.reduce((sum, s) => sum + s.available, 0);
-
-    return {
-      ...course,
-      sections_count: courseSections.length,
-      total_slots: totalSlots,
-      total_enrolled: totalEnrolled,
-      total_available: totalAvailable,
-    };
-  }) || [];
-
-  return {
-    data: coursesWithCounts,
-    isLoading: loadingCourses || loadingSections,
-  };
-}
-
 export function useProgramDetail(detailUrl: string | null | undefined) {
   return useQuery<ProgramDetail, Error>({
     queryKey: ['program-detail', detailUrl],

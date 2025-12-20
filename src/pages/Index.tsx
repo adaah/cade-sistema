@@ -14,7 +14,6 @@ const Index = () => {
   const { myPrograms } = useMyPrograms();
   const isMobile = useIsMobile();
 
-  const currentProgram = myPrograms.find(Boolean);
 
   // Get unique scheduled disciplines
   const scheduledCount = useMemo(() => {
@@ -33,10 +32,17 @@ const Index = () => {
           <h1 className="text-2xl font-bold text-foreground mb-1">
             Minha Grade do Semestre
           </h1>
-          {currentProgram && (
-            <p className="text-muted-foreground text-sm">
-              {currentProgram.title} • {currentProgram.location}
-            </p>
+          {myPrograms.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {myPrograms.map((p) => (
+                <span
+                  key={p.id_ref}
+                  className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted border border-border text-xs text-foreground"
+                >
+                  {p.title}
+                </span>
+              ))}
+            </div>
           )}
         </div>
 

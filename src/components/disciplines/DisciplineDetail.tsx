@@ -89,12 +89,16 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
             <X className="w-5 h-5" />
           </button>
 
-          <span className={cn(
-            "inline-block px-3 py-1 rounded-lg text-sm font-semibold mb-3",
-            discipline.type === 'obrigatoria'
-              ? "bg-primary/10 text-primary"
-              : "bg-warning/10 text-warning"
-          )}>
+          <span
+            className={cn(
+              "inline-block px-3 py-1 rounded-lg text-sm font-semibold mb-3",
+              (discipline as any).type === 'obrigatoria'
+                ? "bg-primary/10 text-primary"
+                : (discipline as any).type
+                ? "bg-warning/10 text-warning"
+                : "bg-muted text-muted-foreground"
+            )}
+          >
             {discipline.code}
           </span>
           
@@ -103,12 +107,16 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
           </h2>
 
           <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Clock className="w-4 h-4" />
-              <span>{discipline.workload}h</span>
-            </div>
-            <span>{discipline.credits} créditos</span>
-            {discipline.semester && <span>{discipline.semester}º Semestre</span>}
+            {typeof (discipline as any).workload === 'number' && (
+              <div className="flex items-center gap-1">
+                <Clock className="w-4 h-4" />
+                <span>{(discipline as any).workload}h</span>
+              </div>
+            )}
+            {typeof (discipline as any).credits === 'number' && (
+              <span>{(discipline as any).credits} créditos</span>
+            )}
+            {(discipline as any).semester && <span>{(discipline as any).semester}º Semestre</span>}
           </div>
 
           <button
@@ -178,8 +186,9 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
             ) : (
               <div className="space-y-3">
                 {sections.map((section, idx) => {
-                  const isFull = section.available <= 0;
-                  const isAlmostFull = section.available > 0 && section.available <= 5;
+                  const available = (section.slots ?? 0) - (section.enrolled ?? 0);
+                  const isFull = available <= 0;
+                  const isAlmostFull = available > 0 && available <= 5;
                   const isAdded = scheduledItems.some(
                     item => item.disciplineCode === discipline.code && item.classCode === section.section_code
                   );
@@ -231,7 +240,7 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                             </div>
                             <div className="flex items-center gap-1">
                               <Users className="w-4 h-4" />
-                              <span>{section.enrolled}/{section.slots} ({section.available} vagas)</span>
+                              <span>{section.enrolled ?? 0}/{section.slots ?? 0} ({available} vagas)</span>
                             </div>
                           </div>
                         </div>
@@ -254,7 +263,7 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                       {isAlmostFull && !isFull && (
                         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-warning/30 text-warning text-sm">
                           <AlertCircle className="w-4 h-4" />
-                          <span>Poucas vagas restantes ({section.available})</span>
+                          <span>Poucas vagas restantes ({available})</span>
                         </div>
                       )}
                     </div>

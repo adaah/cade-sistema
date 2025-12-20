@@ -1,34 +1,34 @@
 import { useMemo } from 'react';
+import { pipe, map, uniq } from 'ramda'
 import { useCourses } from '@/hooks/useApi';
 import { useProgramCoursesBatch } from '@/hooks/useApi';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
 import type { Course } from '@/services/api';
 
-interface UseMyCoursesResult {
-  courses: Course[];
-  isLoading: boolean;
-}
-
 // Aggregates courses from all selected programs, running N parallel queries.
-export function useMyCourses(): UseMyCoursesResult {
+export function useMyCourses() {
   const { selectedPrograms } = useMyPrograms();
-
-  // If no selected programs, preserve previous behavior: return all courses
-  const fallbackAll = useCourses();
 
   const batchResults = useProgramCoursesBatch(selectedPrograms);
 
   const hasSelection = selectedPrograms.length > 0;
 
-  const isLoading = hasSelection
-    ? batchResults.some((r) => r.isLoading)
-    : fallbackAll.isLoading;
+  const isLoading = batchResults.some((r) => r.isLoading)
+
 
   const courses: Course[] = useMemo(() => {
-    if (!hasSelection) return fallbackAll.data || [];
-    // Apenas concatena os resultados mantendo possíveis duplicatas
     return batchResults.flatMap((r) => r.data || []);
-  }, [hasSelection, batchResults, fallbackAll.data]);
+  }, [batchResults]);
 
-  return { courses, isLoading };
+  const types = useMemo(() => pipe(
+      map((r) => r.type),
+      uniq
+      )(courses), [courses]);
+
+  const levels = useMemo(() => pipe(
+          map((r) => r.level),
+          uniq
+      )(courses), [courses]);
+
+  return { courses, isLoading, levels, types };
 }

@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Search, Check, Lock, AlertCircle } from 'lucide-react';
+import { reduce, append } from 'ramda'
 import { MainLayout } from '@/components/layout/MainLayout';
 import { DisciplineCard } from '@/components/disciplines/DisciplineCard';
 import { DisciplineDetail } from '@/components/disciplines/DisciplineDetail';
@@ -9,13 +10,12 @@ import { useSections } from '@/hooks/useApi';
 import { useMyCourses } from '@/hooks/useMyCourses';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { Course } from '@/services/api';
-import { cn } from '@/lib/utils';
+import {cn, getSemesterTitle} from '@/lib/utils';
 
 const Disciplinas = () => {
   const { completedDisciplines, toggleCompletedDiscipline } = useApp();
   const { myPrograms } = useMyPrograms();
-  const currentProgram = myPrograms.find(Boolean);
-  const { courses, isLoading } = useMyCourses();
+  const { courses, isLoading, levels } = useMyCourses();
 
   const selectedProgram = myPrograms.find(Boolean);
   
@@ -24,23 +24,22 @@ const Disciplinas = () => {
   const [activeSemester, setActiveSemester] = useState<number | null>(null);
   const [selectedDiscipline, setSelectedDiscipline] = useState<Course | null>(null);
 
-  const coursesBySemester = useMemo(() => {
-    const grouped: Record<number, Course[]> = {};
-    courses.forEach(course => {
-      const sem = course.semester || 1;
-      if (!grouped[sem]) grouped[sem] = [];
-      grouped[sem].push(course);
-    });
-    return grouped;
-  }, [courses]);
+  const coursesByLevel = useMemo(
+      () =>
+          reduce<Course, Record<string, Course[]>>((acc, course) => {
+            const level = course.level
+            acc[level] = append(course, acc[level] ?? []);
+            return acc;
+          }, {}, courses),
+      [courses]
+  );
 
-  const semesters = Object.keys(coursesBySemester).map(Number).sort((a, b) => a - b);
 
   const canTake = (code: string): boolean => {
     const course = courses?.find(c => c.code === code);
     if (!course) return false;
     if (completedDisciplines.includes(code)) return false;
-    const prerequisites = course.prerequisites || [];
+    const prerequisites = [];
     return prerequisites.every(prereq => completedDisciplines.includes(prereq));
   };
 
@@ -61,10 +60,17 @@ const Disciplinas = () => {
           <h1 className="text-2xl font-bold text-foreground mb-2">
             Catálogo de Disciplinas
           </h1>
-          {selectedProgram ? (
-            <p className="text-muted-foreground">
-              {selectedProgram.title} • {selectedProgram.location}
-            </p>
+          {myPrograms.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {myPrograms.map((p) => (
+                <span
+                  key={p.id_ref}
+                  className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted border border-border text-xs text-foreground"
+                >
+                  {p.title}
+                </span>
+              ))}
+            </div>
           ) : (
             <div className="flex items-center gap-2 text-warning">
               <AlertCircle className="w-4 h-4" />
@@ -126,16 +132,17 @@ const Disciplinas = () => {
           </div>
         ) : courses.length > 0 ? (
           <div className="space-y-6">
-            {semesters.map((semester) => {
-              const semesterCourses = coursesBySemester[semester] || [];
+            {levels.map((level) => {
+              const semesterCourses = coursesByLevel[level] || [];
               const filteredSemesterCourses = semesterCourses.filter(c => {
                 const searchMatch = 
                   c.name.toLowerCase().includes(search.toLowerCase()) ||
                   c.code.toLowerCase().includes(search.toLowerCase());
                 if (!searchMatch) return false;
                 
-                if (activeFilter === 'obrigatoria' && c.type !== 'obrigatoria') return false;
-                if (activeFilter === 'optativa' && c.type !== 'optativa') return false;
+                const typeNorm = (c.type || '').toString().toLowerCase();
+                if (activeFilter === 'obrigatoria' && !typeNorm.includes('obrig')) return false;
+                if (activeFilter === 'optativa' && !typeNorm.includes('optat')) return false;
                 if (activeFilter === 'completed' && !completedDisciplines.includes(c.code)) return false;
                 if (activeFilter === 'available' && !canTake(c.code)) return false;
                 
@@ -145,9 +152,9 @@ const Disciplinas = () => {
               if (filteredSemesterCourses.length === 0) return null;
 
               return (
-                <div key={semester} className="bg-card rounded-xl border border-border p-4">
+                <div key={level} className="bg-card rounded-xl border border-border p-4">
                   <h3 className="font-semibold text-card-foreground mb-4 pb-2 border-b border-border">
-                    {semester}º Semestre
+                    {getSemesterTitle(level)}
                   </h3>
                   
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
