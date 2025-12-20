@@ -8,7 +8,6 @@ import {
   fetchCourseSections,
   fetchSectionsByCourseCode,
   fetchProgramDetail,
-  fetchCoursesForProgram,
   getProgramCourseCodes,
   Program, 
   Course, 
@@ -37,25 +36,8 @@ export function useCourses() {
   });
 }
 
-export function useProgramCourses(programIdRef: string | null | undefined) {
-  return useQuery<Course[], Error>(getProgramCourseQuery(programIdRef));
-}
-
-// Reusable query config for program courses
-export const getProgramCourseQuery = (programIdRef: string | null | undefined) => ({
-  queryKey: ['program-courses', programIdRef] as const,
-  queryFn: () => (programIdRef ? fetchCoursesForProgram(programIdRef) : fetchCourses()),
-  enabled: true,
-  staleTime: 1000 * 60 * 60,
-  gcTime: 1000 * 60 * 60 * 24,
-});
-
-// Alias for a batch of program course queries
-export function useProgramCoursesBatch(programIds: Array<string | null | undefined>) {
-  return useQueries({
-    queries: programIds.map((id) => getProgramCourseQuery(id)),
-  });
-}
+// Query config para um programa (ProgramDetail) por id_ref
+// (removido) batch por código – use useQueries diretamente onde precisar
 
 export function useSections() {
   return useQuery<Section[], Error>({
@@ -104,48 +86,6 @@ export function useCourseSections(courseCode: string | null | undefined) {
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 60,
   });
-}
-
-export function useAvailableCourses() {
-  const { data: courses, isLoading: loadingCourses } = useCourses();
-  const { data: sections, isLoading: loadingSections } = useSections();
-
-  const coursesWithSections = courses?.filter(course => 
-    sections?.some(section => 
-      section.course_code === course.code && section.available > 0
-    )
-  ) || [];
-
-  return {
-    data: coursesWithSections,
-    sections: sections || [],
-    isLoading: loadingCourses || loadingSections,
-  };
-}
-
-export function useCoursesWithSectionCount() {
-  const { data: courses, isLoading: loadingCourses } = useCourses();
-  const { data: sections, isLoading: loadingSections } = useSections();
-
-  const coursesWithCounts = courses?.map(course => {
-    const courseSections = sections?.filter(s => s.course_code === course.code) || [];
-    const totalSlots = courseSections.reduce((sum, s) => sum + s.slots, 0);
-    const totalEnrolled = courseSections.reduce((sum, s) => sum + s.enrolled, 0);
-    const totalAvailable = courseSections.reduce((sum, s) => sum + s.available, 0);
-
-    return {
-      ...course,
-      sections_count: courseSections.length,
-      total_slots: totalSlots,
-      total_enrolled: totalEnrolled,
-      total_available: totalAvailable,
-    };
-  }) || [];
-
-  return {
-    data: coursesWithCounts,
-    isLoading: loadingCourses || loadingSections,
-  };
 }
 
 export function useProgramDetail(detailUrl: string | null | undefined) {

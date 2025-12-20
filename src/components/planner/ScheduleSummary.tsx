@@ -1,10 +1,11 @@
 import { useApp } from '@/contexts/AppContext';
 import { Clock, BookOpen, Trash2 } from 'lucide-react';
 import { useCourses } from '@/hooks/useApi';
+import {useMyCourses} from "@/hooks/useMyCourses.ts";
 
 export function ScheduleSummary() {
   const { scheduledItems, removeFromSchedule, clearSchedule } = useApp();
-  const { data: courses } = useCourses();
+  const { courses } = useMyCourses();
 
   const uniqueDisciplines = scheduledItems.reduce((acc, item) => {
     const key = `${item.disciplineCode}-${item.classCode}`;

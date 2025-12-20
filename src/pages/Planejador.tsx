@@ -7,16 +7,20 @@ import { DisciplineDetail } from '@/components/disciplines/DisciplineDetail';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useApp } from '@/contexts/AppContext';
-import { useCourses, useSections } from '@/hooks/useApi';
-import { Course } from '@/services/api';
+import { Course, Section } from '@/services/api';
 import { Search, Clock, Users } from 'lucide-react';
+import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { cn } from '@/lib/utils';
+import {useMyCourses} from "@/hooks/useMyCourses.ts";
 
 const Planejador = () => {
   const isMobile = useIsMobile();
   const { scheduledItems } = useApp();
-  const { data: courses, isLoading: loadingCourses } = useCourses();
-  const { data: sections, isLoading: loadingSections } = useSections();
+  const { myPrograms } = useMyPrograms();
+  const { courses, isLoading: loadingCourses } = useMyCourses();
+  // Não carregar sections.json na tela de planejador
+  const sections: Section[] = [];
+  const loadingSections = false;
 
   const [search, setSearch] = useState('');
   const [periodFilter, setPeriodFilter] = useState<'all' | 'M' | 'T' | 'N'>('all');
@@ -26,9 +30,10 @@ const Planejador = () => {
     if (!courses || !sections) return [];
 
     return courses.filter(course => {
-      const courseSections = sections.filter(s => 
-        s.course_code === course.code && s.available > 0
-      );
+      const courseSections = sections.filter(s => {
+        const available = (s.slots ?? 0) - (s.enrolled ?? 0);
+        return s.course_code === course.code && available > 0;
+      });
       
       if (courseSections.length === 0) return false;
 
@@ -57,7 +62,7 @@ const Planejador = () => {
 
   const getCourseStats = (courseCode: string) => {
     const courseSections = sections?.filter(s => s.course_code === courseCode) || [];
-    const totalSpots = courseSections.reduce((sum, s) => sum + s.available, 0);
+    const totalSpots = courseSections.reduce((sum, s) => sum + ((s.slots ?? 0) - (s.enrolled ?? 0)), 0);
     return { sectionCount: courseSections.length, availableSpots: totalSpots };
   };
 
@@ -70,9 +75,23 @@ const Planejador = () => {
           <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
             Planejador de Grade
           </h1>
-          <p className="text-muted-foreground">
-            Monte sua grade horária para o próximo semestre
-          </p>
+          <div className="space-y-2">
+            <p className="text-muted-foreground">
+              Monte sua grade horária para o próximo semestre
+            </p>
+            {myPrograms.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {myPrograms.map((p) => (
+                  <span
+                    key={p.id_ref}
+                    className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted border border-border text-xs text-foreground"
+                  >
+                    {p.title}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -133,10 +152,12 @@ const Planejador = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          <span>{course.workload}h</span>
-                        </div>
+                        {typeof (course as any).workload === 'number' && (
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>{(course as any).workload}h</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-1">
                           <Users className="w-3 h-3" />
                           <span>{stats.availableSpots} vagas</span>

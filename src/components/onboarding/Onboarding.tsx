@@ -7,10 +7,10 @@ import { cn } from '@/lib/utils';
 
 export function Onboarding() {
   const { setIsOnboarded } = useApp();
-  const { setSelectedPrograms } = useMyPrograms();
+  const { selectedPrograms, setSelectedPrograms } = useMyPrograms();
   const { data: programs, isLoading, error } = usePrograms();
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>(selectedPrograms);
 
   const filteredPrograms = programs?.filter(p =>
     p.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -18,14 +18,19 @@ export function Onboarding() {
     p.program_type.toLowerCase().includes(search.toLowerCase())
   ) || [];
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]));
+  };
+
   const handleSubmit = () => {
-    if (selected) {
-      setSelectedPrograms([selected]);
+    if (selectedIds.length > 0) {
+      // Substitui pela seleção atual (permite adicionar e remover em massa)
+      setSelectedPrograms(selectedIds);
       setIsOnboarded(true);
     }
   };
 
-  const selectedProgram = programs?.find(p => p.id_ref === selected);
+  const selectedProgram = undefined;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -42,7 +47,7 @@ export function Onboarding() {
         {/* Card */}
         <div className="bg-card rounded-2xl shadow-elevated p-6 border border-border">
           <h2 className="text-lg font-semibold text-card-foreground mb-4">
-            Qual o seu curso?
+            Quais são seus cursos?
           </h2>
 
           {/* Search */}
@@ -69,14 +74,17 @@ export function Onboarding() {
             </div>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {filteredPrograms.slice(0, 50).map((program) => (
+              {[...filteredPrograms]
+                .sort((a, b) => Number(selectedIds.includes(b.id_ref)) - Number(selectedIds.includes(a.id_ref)))
+                .slice(0, 50)
+                .map((program) => (
                 <button
                   key={program.id_ref}
-                  onClick={() => setSelected(program.id_ref)}
+                  onClick={() => toggleSelect(program.id_ref)}
                   className={cn(
                     "w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all",
                     "border-2",
-                    selected === program.id_ref
+                    selectedIds.includes(program.id_ref)
                       ? "border-primary bg-primary/10"
                       : "border-transparent bg-muted hover:bg-accent"
                   )}
@@ -87,7 +95,7 @@ export function Onboarding() {
                       {program.program_type} • {program.location} • {program.mode}
                     </p>
                   </div>
-                  {selected === program.id_ref && (
+                  {selectedIds.includes(program.id_ref) && (
                     <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0 ml-2">
                       <Check className="w-4 h-4 text-primary-foreground" />
                     </div>
@@ -103,28 +111,21 @@ export function Onboarding() {
           )}
 
           {/* Selected info */}
-          {selectedProgram && (
-            <div className="mt-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
-              <p className="text-sm font-medium text-primary">{selectedProgram.title}</p>
-              <p className="text-xs text-muted-foreground">
-                {selectedProgram.time_code} • {selectedProgram.mode}
-              </p>
-            </div>
-          )}
+          {/* Removed single-selected preview for multi-select */}
 
           {/* Submit */}
           <button
             onClick={handleSubmit}
-            disabled={!selected}
+            disabled={selectedIds.length === 0}
             className={cn(
               "w-full mt-6 py-4 rounded-xl font-semibold transition-all",
               "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
-              selected
+              selectedIds.length > 0
                 ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25"
                 : "bg-muted text-muted-foreground cursor-not-allowed"
             )}
           >
-            Entrar no Portal
+            Confirmar seleção ({selectedIds.length})
           </button>
         </div>
 
