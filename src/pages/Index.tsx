@@ -1,21 +1,19 @@
 import { useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { usePrograms, useCourses } from '@/hooks/useApi';
+import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { ScheduleGrid } from '@/components/planner/ScheduleGrid';
 import { ScheduleSummary } from '@/components/planner/ScheduleSummary';
 import { MobileSchedule } from '@/components/planner/MobileSchedule';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Calendar, BookOpen, Loader2 } from 'lucide-react';
+import { Calendar, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Index = () => {
-  const { selectedCourse, scheduledItems, completedDisciplines } = useApp();
-  const { data: programs } = usePrograms();
-  const { data: courses, isLoading: loadingCourses } = useCourses();
+  const { scheduledItems, completedDisciplines } = useApp();
+  const { myPrograms } = useMyPrograms();
   const isMobile = useIsMobile();
 
-  const currentProgram = programs?.find(p => p.id_ref === selectedCourse);
 
   // Get unique scheduled disciplines
   const scheduledCount = useMemo(() => {
@@ -24,13 +22,7 @@ const Index = () => {
   }, [scheduledItems]);
 
   // Calculate total workload
-  const totalWorkload = useMemo(() => {
-    const uniqueCodes = [...new Set(scheduledItems.map(item => item.disciplineCode))];
-    return uniqueCodes.reduce((sum, code) => {
-      const course = courses?.find(c => c.code === code);
-      return sum + (course?.workload || 60);
-    }, 0);
-  }, [scheduledItems, courses]);
+  const totalWorkload = 0
 
   return (
     <MainLayout>
@@ -40,10 +32,17 @@ const Index = () => {
           <h1 className="text-2xl font-bold text-foreground mb-1">
             Minha Grade do Semestre
           </h1>
-          {currentProgram && (
-            <p className="text-muted-foreground text-sm">
-              {currentProgram.title} • {currentProgram.location}
-            </p>
+          {myPrograms.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {myPrograms.map((p) => (
+                <span
+                  key={p.id_ref}
+                  className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted border border-border text-xs text-foreground"
+                >
+                  {p.title}
+                </span>
+              ))}
+            </div>
           )}
         </div>
 
@@ -77,11 +76,7 @@ const Index = () => {
         </div>
 
         {/* Schedule View */}
-        {loadingCourses ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        ) : scheduledItems.length === 0 ? (
+        {scheduledItems.length === 0 ? (
           <div className="bg-card rounded-xl border border-border p-12 text-center">
             <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
             <h2 className="text-lg font-semibold text-card-foreground mb-2">

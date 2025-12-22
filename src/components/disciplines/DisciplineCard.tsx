@@ -23,12 +23,16 @@ export function DisciplineCard({ discipline, onClick }: DisciplineCardProps) {
       onClick={onClick}
     >
       <div className="flex items-start justify-between mb-3">
-        <span className={cn(
-          "px-3 py-1 rounded-lg text-sm font-semibold",
-          discipline.type === 'obrigatoria'
-            ? "bg-primary/10 text-primary"
-            : "bg-warning/10 text-warning"
-        )}>
+        <span
+          className={cn(
+            "px-3 py-1 rounded-lg text-sm font-semibold",
+            (discipline as any).type === 'obrigatoria'
+              ? "bg-primary/10 text-primary"
+              : (discipline as any).type
+              ? "bg-warning/10 text-warning"
+              : "bg-muted text-muted-foreground"
+          )}
+        >
           {discipline.code}
         </span>
         
@@ -53,11 +57,15 @@ export function DisciplineCard({ discipline, onClick }: DisciplineCardProps) {
       </h3>
 
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
-        <div className="flex items-center gap-1">
-          <Clock className="w-4 h-4" />
-          <span>{discipline.workload}h</span>
-        </div>
-        <span>{discipline.credits} créditos</span>
+        {typeof (discipline as any).workload === 'number' && (
+          <div className="flex items-center gap-1">
+            <Clock className="w-4 h-4" />
+            <span>{(discipline as any).workload}h</span>
+          </div>
+        )}
+        {typeof (discipline as any).credits === 'number' && (
+          <span>{(discipline as any).credits} créditos</span>
+        )}
       </div>
 
       {discipline.semester && (

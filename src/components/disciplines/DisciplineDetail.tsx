@@ -1,17 +1,19 @@
 import { X, Clock, Users, MapPin, Plus, AlertCircle, Check } from 'lucide-react';
-import { Course, Section, parseSigaaSchedule } from '@/services/api';
+import { Course, parseSigaaSchedule } from '@/services/api';
+import type { Section } from '@/services/api';
+import { useCourseSections } from '@/hooks/useApi';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 
 interface DisciplineDetailProps {
   discipline: Course;
-  sections: Section[];
   onClose: () => void;
 }
 
-export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDetailProps) {
+export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps) {
   const { scheduledItems, addToSchedule, completedDisciplines, toggleCompletedDiscipline } = useApp();
+  const { data: sections = [], isLoading } = useCourseSections(discipline?.code);
 
   const handleAddClass = (section: Section) => {
     const isAlreadyAdded = scheduledItems.some(
@@ -87,12 +89,16 @@ export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDe
             <X className="w-5 h-5" />
           </button>
 
-          <span className={cn(
-            "inline-block px-3 py-1 rounded-lg text-sm font-semibold mb-3",
-            discipline.type === 'obrigatoria'
-              ? "bg-primary/10 text-primary"
-              : "bg-warning/10 text-warning"
-          )}>
+          <span
+            className={cn(
+              "inline-block px-3 py-1 rounded-lg text-sm font-semibold mb-3",
+              (discipline as any).type === 'obrigatoria'
+                ? "bg-primary/10 text-primary"
+                : (discipline as any).type
+                ? "bg-warning/10 text-warning"
+                : "bg-muted text-muted-foreground"
+            )}
+          >
             {discipline.code}
           </span>
           
@@ -101,12 +107,16 @@ export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDe
           </h2>
 
           <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Clock className="w-4 h-4" />
-              <span>{discipline.workload}h</span>
-            </div>
-            <span>{discipline.credits} créditos</span>
-            {discipline.semester && <span>{discipline.semester}º Semestre</span>}
+            {typeof (discipline as any).workload === 'number' && (
+              <div className="flex items-center gap-1">
+                <Clock className="w-4 h-4" />
+                <span>{(discipline as any).workload}h</span>
+              </div>
+            )}
+            {typeof (discipline as any).credits === 'number' && (
+              <span>{(discipline as any).credits} créditos</span>
+            )}
+            {(discipline as any).semester && <span>{(discipline as any).semester}º Semestre</span>}
           </div>
 
           <button
@@ -137,9 +147,9 @@ export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDe
             <div>
               <h3 className="font-semibold text-card-foreground mb-2">Pré-requisitos</h3>
               <div className="flex flex-wrap gap-2">
-                {discipline.prerequisites?.map(prereq => (
+                {discipline.prerequisites?.map((prereq, idx) => (
                   <span
-                    key={prereq}
+                    key={`${prereq}-${idx}`}
                     className="px-3 py-1 rounded-lg bg-muted text-muted-foreground text-sm font-medium"
                   >
                     {prereq}
@@ -153,23 +163,39 @@ export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDe
             <h3 className="font-semibold text-card-foreground mb-3">
               Turmas Disponíveis ({sections.length})
             </h3>
-            
-            {sections.length === 0 ? (
+
+            {isLoading ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="p-4 rounded-xl border-2 border-border bg-muted/50 animate-pulse">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 w-40 bg-muted rounded" />
+                        <div className="h-3 w-48 bg-muted rounded" />
+                        <div className="h-3 w-32 bg-muted rounded" />
+                      </div>
+                      <div className="h-9 w-24 bg-muted rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : sections.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 Nenhuma turma disponível para esta disciplina no momento.
               </p>
             ) : (
               <div className="space-y-3">
-                {sections.map((section) => {
-                  const isFull = section.available <= 0;
-                  const isAlmostFull = section.available > 0 && section.available <= 5;
+                {sections.map((section, idx) => {
+                  const available = (section.slots ?? 0) - (section.enrolled ?? 0);
+                  const isFull = available <= 0;
+                  const isAlmostFull = available > 0 && available <= 5;
                   const isAdded = scheduledItems.some(
                     item => item.disciplineCode === discipline.code && item.classCode === section.section_code
                   );
 
                   return (
                     <div
-                      key={section.section_code}
+                      key={`${section.course_code || discipline.code}-${section.section_code || idx}`}
                       className={cn(
                         "p-4 rounded-xl border-2 transition-all",
                         isFull ? "border-destructive/50 bg-destructive/5" :
@@ -214,7 +240,7 @@ export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDe
                             </div>
                             <div className="flex items-center gap-1">
                               <Users className="w-4 h-4" />
-                              <span>{section.enrolled}/{section.slots} ({section.available} vagas)</span>
+                              <span>{section.enrolled ?? 0}/{section.slots ?? 0} ({available} vagas)</span>
                             </div>
                           </div>
                         </div>
@@ -237,7 +263,7 @@ export function DisciplineDetail({ discipline, sections, onClose }: DisciplineDe
                       {isAlmostFull && !isFull && (
                         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-warning/30 text-warning text-sm">
                           <AlertCircle className="w-4 h-4" />
-                          <span>Poucas vagas restantes ({section.available})</span>
+                          <span>Poucas vagas restantes ({available})</span>
                         </div>
                       )}
                     </div>

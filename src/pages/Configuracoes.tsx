@@ -1,16 +1,14 @@
 import { useRef, useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useApp } from '@/contexts/AppContext';
-import { usePrograms } from '@/hooks/useApi';
-import { Sun, Moon, Trash2, RotateCcw, User, Download, Upload, Check } from 'lucide-react';
+import { useMyPrograms } from '@/hooks/useMyPrograms';
+import { Sun, Moon, Trash2, RotateCcw, User, Download, Upload, Check, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 const Configuracoes = () => {
   const { 
     theme, 
     toggleTheme, 
-    selectedCourse, 
-    setSelectedCourse,
     setIsOnboarded,
     clearSchedule,
     completedDisciplines,
@@ -18,11 +16,11 @@ const Configuracoes = () => {
     importSettings
   } = useApp();
   
-  const { data: programs } = usePrograms();
+  const { myPrograms, removeProgram } = useMyPrograms();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importSuccess, setImportSuccess] = useState(false);
 
-  const currentProgram = programs?.find(p => p.id_ref === selectedCourse);
+  const hasPrograms = myPrograms.length > 0;
 
   const handleResetAll = () => {
     if (confirm('Tem certeza que deseja resetar todos os dados? Esta ação não pode ser desfeita.')) {
@@ -39,9 +37,9 @@ const Configuracoes = () => {
     });
   };
 
-  const handleChangeCourse = () => {
+  const handleAddCourse = () => {
+    // Reabre o onboarding para adicionar mais um curso
     setIsOnboarded(false);
-    setSelectedCourse(null);
   };
 
   const handleExport = () => {
@@ -108,22 +106,46 @@ const Configuracoes = () => {
         </div>
 
         <div className="space-y-6">
-          {/* Course */}
+          {/* Courses */}
           <div className="bg-card rounded-xl border border-border p-5">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                 <User className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h3 className="font-semibold text-card-foreground">Meu Curso</h3>
-                <p className="text-sm text-muted-foreground">{currentProgram?.title || 'Não selecionado'}</p>
+                <h3 className="font-semibold text-card-foreground">Meus Cursos</h3>
+                {!hasPrograms && (
+                  <p className="text-sm text-muted-foreground">Nenhum curso adicionado</p>
+                )}
               </div>
             </div>
+            {/* Lista de cursos como tags */}
+            {hasPrograms && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {myPrograms.map((program) => (
+                  <span
+                    key={program.id_ref}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted border border-border text-xs text-foreground"
+                    title={`${program.title} • ${program.location}`}
+                  >
+                    <span className="max-w-[220px] truncate">{program.title}</span>
+                    <button
+                      onClick={() => removeProgram(program.id_ref)}
+                      className="inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={`Remover curso ${program.title}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <button
-              onClick={handleChangeCourse}
+              onClick={handleAddCourse}
               className="w-full py-2.5 rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors"
             >
-              Alterar curso
+              Adicionar Curso
             </button>
           </div>
 
