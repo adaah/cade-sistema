@@ -12,6 +12,7 @@ import { Search, Clock, Users } from 'lucide-react';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { cn } from '@/lib/utils';
 import {useMyCourses} from "@/hooks/useMyCourses.ts";
+import { fuzzyFilter } from '@/lib/fuzzy';
 
 const Planejador = () => {
   const isMobile = useIsMobile();
@@ -29,26 +30,17 @@ const Planejador = () => {
   const availableCourses = useMemo(() => {
     if (!courses || !sections) return [];
 
-    return courses.filter(course => {
-      const courseSections = sections.filter(s => {
+    // Primeiro, aplica filtros por disponibilidade e período
+    const byAvailabilityAndPeriod = courses.filter((course) => {
+      const courseSections = sections.filter((s) => {
         const available = (s.slots ?? 0) - (s.enrolled ?? 0);
         return s.course_code === course.code && available > 0;
       });
-      
+
       if (courseSections.length === 0) return false;
 
-      if (search) {
-        const searchLower = search.toLowerCase();
-        const matchesSearch = 
-          course.name.toLowerCase().includes(searchLower) ||
-          course.code.toLowerCase().includes(searchLower) ||
-          courseSections.some(s => s.professor.toLowerCase().includes(searchLower));
-        
-        if (!matchesSearch) return false;
-      }
-
       if (periodFilter !== 'all') {
-        const hasMatchingPeriod = courseSections.some(s => 
+        const hasMatchingPeriod = courseSections.some((s) =>
           s.schedule_raw?.includes(periodFilter)
         );
         if (!hasMatchingPeriod) return false;
@@ -56,6 +48,14 @@ const Planejador = () => {
 
       return true;
     });
+
+    // Depois, aplica busca fuzzy por nome/código (e.g., professor se sections carregadas)
+    const searched = fuzzyFilter(byAvailabilityAndPeriod, search, [
+      'name',
+      'code',
+    ]);
+
+    return searched;
   }, [courses, sections, search, periodFilter]);
 
   // Sections para a disciplina selecionada serão carregadas pelo DisciplineDetail

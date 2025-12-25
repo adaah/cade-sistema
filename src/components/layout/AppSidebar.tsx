@@ -4,9 +4,9 @@ import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 
 const menuItems = [
-  { title: 'Início', url: '/', icon: Home },
+  { title: 'Início', url: '/', icon: Home, disabled: true },
   { title: 'Disciplinas', url: '/disciplinas', icon: BookOpen },
-  { title: 'Meu Planejador', url: '/planejador', icon: Calendar },
+  { title: 'Planejador', url: '/planejador', icon: Calendar, disabled: true },
   { title: 'Configurações', url: '/configuracoes', icon: Settings },
 ];
 
@@ -28,14 +28,24 @@ export function AppSidebar() {
             <li key={item.url}>
               <NavLink
                 to={item.url}
+                onClick={item.disabled ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
+                aria-disabled={item.disabled ? true : undefined}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-lg text-sidebar-foreground",
-                  "transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  "transition-all duration-200",
+                  item.disabled
+                    ? "opacity-60 cursor-not-allowed"
+                    : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )}
                 activeClassName="bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
               >
                 <item.icon className="w-5 h-5" />
                 <span className="font-medium">{item.title}</span>
+                {item.disabled && (
+                  <span className="ml-2 text-[9px] px-1.5 py-0 rounded-full bg-muted border border-border text-muted-foreground">
+                    Em breve
+                  </span>
+                )}
               </NavLink>
             </li>
           ))}

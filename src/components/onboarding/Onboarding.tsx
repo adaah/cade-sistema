@@ -4,6 +4,7 @@ import { useApp } from '@/contexts/AppContext';
 import { usePrograms } from '@/hooks/useApi';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { cn } from '@/lib/utils';
+import { fuzzyFilter } from '@/lib/fuzzy';
 
 export function Onboarding() {
   const { setIsOnboarded } = useApp();
@@ -12,11 +13,12 @@ export function Onboarding() {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(selectedPrograms);
 
-  const filteredPrograms = programs?.filter(p =>
-    p.title.toLowerCase().includes(search.toLowerCase()) ||
-    p.location.toLowerCase().includes(search.toLowerCase()) ||
-    p.program_type.toLowerCase().includes(search.toLowerCase())
-  ) || [];
+  const filteredPrograms = fuzzyFilter(programs, search, [
+    'title',
+    'location',
+    'program_type',
+    'mode',
+  ]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]));

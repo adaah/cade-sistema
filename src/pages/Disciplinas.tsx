@@ -11,6 +11,7 @@ import { useMyCourses } from '@/hooks/useMyCourses';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { Course } from '@/services/api';
 import {cn, getSemesterTitle} from '@/lib/utils';
+import { fuzzyFilter } from '@/lib/fuzzy';
 
 const Disciplinas = () => {
   const { completedDisciplines, toggleCompletedDiscipline } = useApp();
@@ -132,20 +133,22 @@ const Disciplinas = () => {
           </div>
         ) : courses.length > 0 ? (
           <div className="space-y-6">
-            {levels.map((level) => {
+            {(() => {
+              const optCheck = (l: string) => /optat/i.test(l);
+              const orderedLevels = [
+                ...levels.filter((l) => !optCheck(l)),
+                ...levels.filter((l) => optCheck(l)),
+              ];
+              return orderedLevels;
+            })().map((level) => {
               const semesterCourses = coursesByLevel[level] || [];
-              const filteredSemesterCourses = semesterCourses.filter(c => {
-                const searchMatch = 
-                  c.name.toLowerCase().includes(search.toLowerCase()) ||
-                  c.code.toLowerCase().includes(search.toLowerCase());
-                if (!searchMatch) return false;
-                
+              const searched = fuzzyFilter(semesterCourses, search, ['name', 'code']);
+              const filteredSemesterCourses = searched.filter(c => {
                 const typeNorm = (c.type || '').toString().toLowerCase();
                 if (activeFilter === 'obrigatoria' && !typeNorm.includes('obrig')) return false;
                 if (activeFilter === 'optativa' && !typeNorm.includes('optat')) return false;
                 if (activeFilter === 'completed' && !completedDisciplines.includes(c.code)) return false;
                 if (activeFilter === 'available' && !canTake(c.code)) return false;
-                
                 return true;
               });
 
@@ -164,35 +167,13 @@ const Disciplinas = () => {
                       const blocked = !completed && !available;
 
                       return (
-                        <button
+                        <DisciplineCard
                           key={course.code}
+                          discipline={course}
+                          available={available}
+                          blocked={blocked}
                           onClick={() => setSelectedDiscipline(course)}
-                          className={cn(
-                            "p-3 rounded-xl text-left transition-all border-2",
-                            completed && "bg-success/10 border-success",
-                            available && !completed && "bg-warning/10 border-warning hover:bg-warning/20",
-                            blocked && "bg-muted border-muted opacity-60"
-                          )}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-semibold truncate">{course.code}</span>
-                            {completed && <Check className="w-3 h-3 text-success flex-shrink-0" />}
-                            {blocked && <Lock className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
-                          </div>
-                          <p className={cn(
-                            "text-xs line-clamp-2",
-                            completed ? "text-success" : 
-                            available ? "text-warning" : 
-                            "text-muted-foreground"
-                          )}>
-                            {course.name}
-                          </p>
-                          {(course.prerequisites?.length || 0) > 0 && (
-                            <p className="text-[10px] text-muted-foreground mt-1 truncate">
-                              Pré-req: {course.prerequisites?.join(', ')}
-                            </p>
-                          )}
-                        </button>
+                        />
                       );
                     })}
                   </div>
