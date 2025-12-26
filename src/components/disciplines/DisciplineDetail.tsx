@@ -1,4 +1,4 @@
-import { X, Clock, Users, MapPin, Plus, AlertCircle, Check } from 'lucide-react';
+import { X, Clock, Users, Plus, AlertCircle, Check, User } from 'lucide-react';
 import { Course, parseSigaaSchedule } from '@/services/api';
 import type { Section } from '@/services/api';
 import { useCourseSections } from '@/hooks/useApi';
@@ -55,12 +55,13 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
         description: `${discipline.name} (${section.section_code}) foi adicionada ao planejador.`,
       });
     } else {
+      const timeCodes = Array.isArray((section as any)?.time_codes) ? (section as any).time_codes.join(', ') : null;
       addToSchedule({
         disciplineCode: discipline.code,
         disciplineName: discipline.name,
         classCode: section.section_code,
         professor: section.professor,
-        schedule: 'Horário a definir',
+        schedule: timeCodes || 'Horário a definir',
         color: '',
         day: 'Seg',
         startTime: '08:00',
@@ -186,7 +187,9 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
             ) : (
               <div className="space-y-3">
                 {sections.map((section, idx) => {
-                  const available = (section.slots ?? 0) - (section.enrolled ?? 0);
+                  const seatsCount = (section as any)?.seats_count ?? (section.slots ?? 0);
+                  const seatsAccepted = (section as any)?.seats_accepted ?? (section.enrolled ?? 0);
+                  const available = seatsCount - seatsAccepted;
                   const isFull = available <= 0;
                   const isAlmostFull = available > 0 && available <= 5;
                   const isAdded = scheduledItems.some(
@@ -205,7 +208,7 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                       )}
                     >
                       <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-semibold text-card-foreground">
                               Turma {section.section_code}
@@ -222,25 +225,35 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                             )}
                           </div>
                           
-                          <p className="text-sm text-muted-foreground mb-1">
-                            {section.professor}
-                          </p>
-                          
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-4 h-4" />
-                              <span>{section.schedule_raw || 'Horário a definir'}</span>
+                          <div className="mb-2">
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <User className="w-4 h-4" />
+                              <span className="truncate block">
+                                {Array.isArray((section as any)?.teachers) && (section as any)?.teachers.length > 0
+                                  ? (section as any).teachers.join(', ')
+                                  : (section.professor || 'Professor(es) a definir')}
+                              </span>
                             </div>
                           </div>
                           
-                          <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <MapPin className="w-4 h-4" />
-                              <span>{section.room}</span>
+                          <div className="mt-2 pt-2 border-t border-border">
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                <span>
+                                  {section.schedule_raw
+                                    || (Array.isArray((section as any)?.time_codes) && (section as any).time_codes.length > 0
+                                          ? (section as any).time_codes.join(', ')
+                                          : 'Horário a definir')}
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1">
-                              <Users className="w-4 h-4" />
-                              <span>{section.enrolled ?? 0}/{section.slots ?? 0} ({available} vagas)</span>
+
+                            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <Users className="w-4 h-4" />
+                                <span>{seatsAccepted}/{seatsCount}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
