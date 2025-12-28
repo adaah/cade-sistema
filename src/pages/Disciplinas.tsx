@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, Check, Lock, AlertCircle } from 'lucide-react';
+import { Search, AlertCircle } from 'lucide-react';
 import { reduce, append } from 'ramda'
 import { MainLayout } from '@/components/layout/MainLayout';
 import { DisciplineCard } from '@/components/disciplines/DisciplineCard';
@@ -12,16 +12,24 @@ import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { Course } from '@/services/api';
 import {cn, getSemesterTitle} from '@/lib/utils';
 import { fuzzyFilter } from '@/lib/fuzzy';
+import { useMode } from '@/hooks/useMode';
+import { useFavoriteCourses } from '@/hooks/useFavoriteCourses';
+import { useFilter } from '@/hooks/useFilter';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 const Disciplinas = () => {
   const { completedDisciplines, toggleCompletedDiscipline } = useApp();
   const { myPrograms } = useMyPrograms();
   const { courses, isLoading, levels } = useMyCourses();
+  const { isSimplified, isFull } = useMode();
+  const { isFavorite, favoriteCodes } = useFavoriteCourses();
 
   const selectedProgram = myPrograms.find(Boolean);
   
   const [search, setSearch] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all');
+  // search, semester and modal states
   const [activeSemester, setActiveSemester] = useState<number | null>(null);
   const [selectedDiscipline, setSelectedDiscipline] = useState<Course | null>(null);
 
@@ -46,13 +54,26 @@ const Disciplinas = () => {
 
   // Sections são carregadas internamente pelo DisciplineDetail
 
+  // Type group (exclusive): all | obrigatoria | optativa
+  const [typeFilter, setTypeFilter] = useState<'all' | 'obrigatoria' | 'optativa'>('all');
+
+  // Multi-select filters (AND). Exclude type-related ones from this list.
   const filters = [
-    { id: 'all', label: 'Todas' },
-    { id: 'obrigatoria', label: 'Obrigatórias' },
-    { id: 'optativa', label: 'Optativas' },
-    { id: 'completed', label: 'Cursadas' },
-    { id: 'available', label: 'Disponíveis' },
+    ...(isFull ? [{ id: 'available', label: 'Disponíveis' }] as const : []),
+    ...(!isSimplified ? [{ id: 'completed', label: 'Cursadas' }] as const : []),
+    { id: 'not_completed', label: 'Não Concluídas' },
+    { id: 'favorites', label: 'Favoritos' },
   ];
+
+  // Build rules map for useFilter (excluding 'favorites' which controls layout)
+  const rules = useMemo(() => ({
+    completed: (c: Course) => completedDisciplines.includes(c.code),
+    not_completed: (c: Course) => !completedDisciplines.includes(c.code),
+    available: (c: Course) => canTake(c.code),
+    favorites: (c: Course) => favoriteCodes.includes(c.code),
+  }), [completedDisciplines, favoriteCodes]);
+
+  const { isActive, isOnly, isAll, activeIds, apply, toggle } = useFilter<Course>({ rules });
 
   return (
     <MainLayout>
@@ -93,37 +114,77 @@ const Disciplinas = () => {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-6">
-          {filters.map((filter) => (
-            <button
-              key={filter.id}
-              onClick={() => setActiveFilter(filter.id)}
-              className={cn(
-                "px-4 py-2 rounded-full text-sm font-medium transition-all",
-                activeFilter === filter.id
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-                  : "bg-muted text-muted-foreground hover:bg-accent"
-              )}
-            >
-              {filter.label}
-            </button>
-          ))}
-        </div>
+        <Collapsible defaultOpen={false}>
+          <div className="mb-2 flex items-center justify-between gap-3 max-w-[100vw] overflow-x-auto">
+            <CollapsibleTrigger className={cn(
+              'inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-card hover:bg-accent text-sm font-medium'
+            )}>
+              <span>Filtros</span>
+              <Badge variant={isAll ? 'outline' : 'secondary'}>
+                {activeIds.length}
+              </Badge>
+            </CollapsibleTrigger>
+            <div className="inline-flex items-stretch text-sm shrink-0">
+              {([
+                { id: 'all', label: 'Todos' },
+                { id: 'obrigatoria', label: 'Obrigatórias' },
+                { id: 'optativa', label: 'Optativas' },
+              ] as const).map((b, idx) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => setTypeFilter(b.id as any)}
+                  className={cn(
+                    'px-2.5 py-1.5 border border-border -ml-px first:ml-0',
+                    idx === 0 ? 'rounded-l-xl' : '',
+                    idx === 2 ? 'rounded-r-xl' : '',
+                    typeFilter === b.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-accent'
+                  )}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <CollapsibleContent>
+            <div className="flex flex-wrap gap-2 mb-6 p-1 max-w-[100vw]">
+              {filters.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => toggle(f.id)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all",
+                    isActive(f.id)
+                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                      : "bg-muted text-muted-foreground hover:bg-accent"
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
-        <div className="flex flex-wrap gap-4 mb-6">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-success" />
-            <span className="text-sm text-muted-foreground">Cursada</span>
+        {!isSimplified && (
+          <div className="flex flex-wrap gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-success" />
+              <span className="text-sm text-muted-foreground">Cursada</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-warning" />
+              <span className="text-sm text-muted-foreground">Disponível</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-muted" />
+              <span className="text-sm text-muted-foreground">Bloqueada</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-warning" />
-            <span className="text-sm text-muted-foreground">Disponível</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-muted" />
-            <span className="text-sm text-muted-foreground">Bloqueada</span>
-          </div>
-        </div>
+        )}
 
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -143,14 +204,15 @@ const Disciplinas = () => {
             })().map((level) => {
               const semesterCourses = coursesByLevel[level] || [];
               const searched = fuzzyFilter(semesterCourses, search, ['name', 'code']);
-              const filteredSemesterCourses = searched.filter(c => {
-                const typeNorm = (c.type || '').toString().toLowerCase();
-                if (activeFilter === 'obrigatoria' && !typeNorm.includes('obrig')) return false;
-                if (activeFilter === 'optativa' && !typeNorm.includes('optat')) return false;
-                if (activeFilter === 'completed' && !completedDisciplines.includes(c.code)) return false;
-                if (activeFilter === 'available' && !canTake(c.code)) return false;
-                return true;
-              });
+              // Apply AND filters (favorites, completed, available, etc.)
+              let filteredSemesterCourses = apply(searched);
+              // Apply type group (exclusive)
+              if (typeFilter !== 'all') {
+                const matchKey = typeFilter === 'obrigatoria' ? 'obrig' : 'optat';
+                filteredSemesterCourses = filteredSemesterCourses.filter((c) =>
+                  (c.type || '').toString().toLowerCase().includes(matchKey),
+                );
+              }
 
               if (filteredSemesterCourses.length === 0) return null;
 
@@ -165,13 +227,15 @@ const Disciplinas = () => {
                       const completed = completedDisciplines.includes(course.code);
                       const available = canTake(course.code);
                       const blocked = !completed && !available;
+                      const availableProp = isSimplified ? true : available;
+                      const blockedProp = isSimplified ? false : blocked;
 
                       return (
                         <DisciplineCard
                           key={course.code}
                           discipline={course}
-                          available={available}
-                          blocked={blocked}
+                          available={availableProp}
+                          blocked={blockedProp}
                           onClick={() => setSelectedDiscipline(course)}
                         />
                       );

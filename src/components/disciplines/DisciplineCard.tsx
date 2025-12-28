@@ -1,7 +1,9 @@
-import { Clock, Check, Users } from 'lucide-react';
+import { Clock, Check, Users, Heart } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 import { Course } from '@/services/api';
+import { useMode } from '@/hooks/useMode';
+import { useFavoriteCourses } from '@/hooks/useFavoriteCourses';
 
 interface DisciplineCardProps {
   discipline: Course;
@@ -12,8 +14,14 @@ interface DisciplineCardProps {
 
 export function DisciplineCard({ discipline, onClick, available, blocked }: DisciplineCardProps) {
   const { completedDisciplines, toggleCompletedDiscipline } = useApp();
+  const { isSimplified } = useMode();
+  const { isFavorite, toggleFavorite } = useFavoriteCourses();
 
   const isCompleted = completedDisciplines.includes(discipline.code);
+  const favorite = isFavorite(discipline.code);
+  const showCompletedStyles = isCompleted;
+  const showBlocked = !isSimplified && !!blocked;
+  const showAvailable = isSimplified ? !isCompleted : !!available;
 
   return (
     <div
@@ -21,13 +29,13 @@ export function DisciplineCard({ discipline, onClick, available, blocked }: Disc
         "group relative bg-card rounded-xl border border-border px-4 pt-4 pb-3 sm:px-5 sm:pt-5 sm:pb-4 cursor-pointer",
         "flex h-full flex-col",
         "transition-all duration-200 hover:shadow-card-hover hover:scale-[1.02]",
-        isCompleted && "border-success/50 bg-success/5",
-        !isCompleted && available && "bg-warning/10 border-warning hover:bg-warning/20",
-        !isCompleted && blocked && "bg-muted border-muted opacity-60"
+        showCompletedStyles && "border-success/50 bg-success/5",
+        !showCompletedStyles && showAvailable && "bg-warning/10 border-warning hover:bg-warning/20",
+        !showCompletedStyles && showBlocked && "bg-muted border-muted opacity-60"
       )}
       onClick={onClick}
     >
-      <div className="flex items-start justify-between mb-2 sm:mb-3">
+      <div className="flex items-center justify-between mb-1 sm:mb-2">
         <span
           className={cn(
             "px-2.5 py-1 rounded-lg text-[10px] sm:text-xs font-semibold",
@@ -40,25 +48,39 @@ export function DisciplineCard({ discipline, onClick, available, blocked }: Disc
         >
           {discipline.code}
         </span>
-        
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleCompletedDiscipline(discipline.code);
-          }}
-          className={cn(
-            "p-2 rounded-lg transition-colors",
-            isCompleted
-              ? "text-success bg-success/10"
-              : "text-muted-foreground hover:bg-muted"
-          )}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFavorite(discipline.code);
+            }}
+            className={cn(
+              "p-2 rounded-lg transition-colors",
+              favorite ? "text-rose-600 bg-rose-500/10" : "text-muted-foreground hover:bg-muted"
+            )}
+            aria-label={favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
           >
-          {isCompleted ? (
-            <Check className="w-4 h-4" />
-          ) : (
-            <span className="block w-4 h-4 rounded-full border border-current" />
-          )}
-        </button>
+            <Heart className={cn("w-4 h-4", favorite && "fill-current")}/>
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleCompletedDiscipline(discipline.code);
+            }}
+            className={cn(
+              "p-2 rounded-lg transition-colors",
+              isCompleted
+                ? "text-success bg-success/10"
+                : "text-muted-foreground hover:bg-muted"
+            )}
+          >
+            {isCompleted ? (
+              <Check className="w-4 h-4" />
+            ) : (
+              <span className="block w-4 h-4 rounded-full border border-current" />
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="flex-1">

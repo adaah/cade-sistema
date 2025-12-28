@@ -1,10 +1,14 @@
-import { X, Clock, Users, Plus, AlertCircle, Check, User } from 'lucide-react';
+import { X, Clock, Users, Plus, AlertCircle, Check, Heart, ChevronDown, ChevronUp } from 'lucide-react';
 import { Course, parseSigaaSchedule } from '@/services/api';
 import type { Section } from '@/services/api';
-import { useCourseSections } from '@/hooks/useApi';
+import { useCourseSections, useCourseByCode, useCourses } from '@/hooks/useApi';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { useFavoriteCourses } from '@/hooks/useFavoriteCourses';
+import { useEffect, useState } from 'react';
+import { LargeDisciplineCard } from '@/components/disciplines/LargeDisciplineCard';
+import { BreadcrumbTags } from '@/components/disciplines/BreadcrumbTags';
 
 interface DisciplineDetailProps {
   discipline: Course;
@@ -13,17 +17,56 @@ interface DisciplineDetailProps {
 
 export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps) {
   const { scheduledItems, addToSchedule, completedDisciplines, toggleCompletedDiscipline } = useApp();
-  const { data: sections = [], isLoading } = useCourseSections(discipline?.code);
+  // Estado local para navegação dentro do drawer
+  const [stack, setStack] = useState<{ code: string }[]>([{ code: discipline.code }]);
+  const currentCode = stack[stack.length - 1]?.code || discipline.code;
+
+  const { data: sections = [], isLoading } = useCourseSections(currentCode);
+  const { data: currentDetail } = useCourseByCode(currentCode);
+  const { data: allCourses = [] } = useCourses();
+  const currentName = currentDetail?.name ?? discipline.name;
+
+  // estados de colapso
+  const [openClasses, setOpenClasses] = useState(false);
+  const [openPrereq, setOpenPrereq] = useState(false);
+  const [openCoreq, setOpenCoreq] = useState(false);
+  const [openEquiv, setOpenEquiv] = useState(false);
+
+  // seleção de opção para arrays de arrays
+  const [prereqOptionIndex, setPrereqOptionIndex] = useState(0);
+  const [coreqOptionIndex, setCoreqOptionIndex] = useState(0);
+
+  // quando o discipline externo muda (abrir novo drawer), resetar stack
+  useEffect(() => {
+    setStack([{ code: discipline.code }]);
+    setPrereqOptionIndex(0);
+    setCoreqOptionIndex(0);
+    setOpenClasses(false);
+    setOpenPrereq(false);
+    setOpenCoreq(false);
+    setOpenEquiv(false);
+  }, [discipline.code]);
+
+  // Ao navegar para outra disciplina dentro do drawer, colapsar tudo por padrão
+  useEffect(() => {
+    setOpenClasses(false);
+    setOpenPrereq(false);
+    setOpenCoreq(false);
+    setOpenEquiv(false);
+    setPrereqOptionIndex(0);
+    setCoreqOptionIndex(0);
+  }, [currentCode]);
+  const { isFavorite, toggleFavorite } = useFavoriteCourses();
 
   const handleAddClass = (section: Section) => {
     const isAlreadyAdded = scheduledItems.some(
-      item => item.disciplineCode === discipline.code && item.classCode === section.section_code
+      (item) => item.disciplineCode === currentCode && item.classCode === section.section_code,
     );
 
     if (isAlreadyAdded) {
       toast({
         title: "Turma já adicionada",
-        description: `${discipline.name} (${section.section_code}) já está no seu planejador.`,
+        description: `${currentName} (${section.section_code}) já está no seu planejador.`,
         variant: "destructive"
       });
       return;
@@ -38,8 +81,8 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
     if (schedules && schedules.length > 0) {
       schedules.forEach(sched => {
         addToSchedule({
-          disciplineCode: discipline.code,
-          disciplineName: discipline.name,
+          disciplineCode: currentCode,
+          disciplineName: currentName,
           classCode: section.section_code,
           professor: section.professor,
           schedule: section.schedule_raw || `${sched.day} ${sched.start_time}-${sched.end_time}`,
@@ -52,13 +95,13 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
 
       toast({
         title: "Turma adicionada!",
-        description: `${discipline.name} (${section.section_code}) foi adicionada ao planejador.`,
+        description: `${currentName} (${section.section_code}) foi adicionada ao planejador.`,
       });
     } else {
       const timeCodes = Array.isArray((section as any)?.time_codes) ? (section as any).time_codes.join(', ') : null;
       addToSchedule({
-        disciplineCode: discipline.code,
-        disciplineName: discipline.name,
+        disciplineCode: currentCode,
+        disciplineName: currentName,
         classCode: section.section_code,
         professor: section.professor,
         schedule: timeCodes || 'Horário a definir',
@@ -70,13 +113,13 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
 
       toast({
         title: "Turma adicionada!",
-        description: `${discipline.name} (${section.section_code}) foi adicionada. Horário não disponível.`,
+        description: `${currentName} (${section.section_code}) foi adicionada. Horário não disponível.`,
         variant: "default"
       });
     }
   };
 
-  const isCompleted = completedDisciplines.includes(discipline.code);
+  const isCompleted = completedDisciplines.includes(currentCode);
 
   return (
     <div className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-50 flex items-center justify-end">
@@ -90,38 +133,45 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
             <X className="w-5 h-5" />
           </button>
 
-          <span
-            className={cn(
-              "inline-block px-3 py-1 rounded-lg text-sm font-semibold mb-3",
-              (discipline as any).type === 'obrigatoria'
-                ? "bg-primary/10 text-primary"
-                : (discipline as any).type
-                ? "bg-warning/10 text-warning"
-                : "bg-muted text-muted-foreground"
-            )}
-          >
-            {discipline.code}
-          </span>
+          <div className="mb-3">
+            <BreadcrumbTags
+              items={stack}
+              onSelectIndex={(idx) => {
+                // voltar para um nível do breadcrumb
+                setStack((prev) => prev.slice(0, idx + 1));
+              }}
+            />
+          </div>
           
-          <h2 className="text-xl font-bold text-card-foreground pr-10">
-            {discipline.name}
-          </h2>
+          <div className="flex items-center justify-between gap-3 pr-10">
+            <h2 className="text-xl font-bold text-card-foreground">{currentName}</h2>
+            <button
+              onClick={() => toggleFavorite(currentCode)}
+              className={cn(
+                "p-2 rounded-lg transition-colors",
+                isFavorite(currentCode) ? "text-rose-600 bg-rose-500/10" : "text-muted-foreground hover:bg-muted"
+              )}
+              aria-label={isFavorite(currentCode) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+            >
+              <Heart className={cn("w-5 h-5", isFavorite(currentCode) && "fill-current")} />
+            </button>
+          </div>
 
           <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
-            {typeof (discipline as any).workload === 'number' && (
+            {typeof (currentDetail as any)?.workload === 'number' && (
               <div className="flex items-center gap-1">
                 <Clock className="w-4 h-4" />
-                <span>{(discipline as any).workload}h</span>
+                <span>{(currentDetail as any)?.workload}h</span>
               </div>
             )}
-            {typeof (discipline as any).credits === 'number' && (
-              <span>{(discipline as any).credits} créditos</span>
+            {typeof (currentDetail as any)?.credits === 'number' && (
+              <span>{(currentDetail as any)?.credits} créditos</span>
             )}
-            {(discipline as any).semester && <span>{(discipline as any).semester}º Semestre</span>}
+            {(currentDetail as any)?.semester && <span>{(currentDetail as any)?.semester}º Semestre</span>}
           </div>
 
           <button
-            onClick={() => toggleCompletedDiscipline(discipline.code)}
+            onClick={() => toggleCompletedDiscipline(currentCode)}
             className={cn(
               "mt-4 flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
               isCompleted
@@ -135,156 +185,340 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
         </div>
 
         <div className="p-6 space-y-6">
-          {discipline.description && (
+          {currentDetail?.description && (
             <div>
               <h3 className="font-semibold text-card-foreground mb-2">Ementa</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                {discipline.description}
+                {currentDetail.description}
               </p>
             </div>
           )}
 
-          {(discipline.prerequisites?.length || 0) > 0 && (
-            <div>
-              <h3 className="font-semibold text-card-foreground mb-2">Pré-requisitos</h3>
-              <div className="flex flex-wrap gap-2">
-                {discipline.prerequisites?.map((prereq, idx) => (
-                  <span
-                    key={`${prereq}-${idx}`}
-                    className="px-3 py-1 rounded-lg bg-muted text-muted-foreground text-sm font-medium"
-                  >
-                    {prereq}
-                  </span>
-                ))}
-              </div>
+          {/* Turmas Disponíveis com collapse */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-card-foreground">Turmas Disponíveis ({sections.length})</h3>
+              <button
+                type="button"
+                onClick={() => setOpenClasses((v) => !v)}
+                className="px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted"
+                aria-label={openClasses ? 'Recolher' : 'Expandir'}
+              >
+                {openClasses ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
             </div>
-          )}
 
-          <div>
-            <h3 className="font-semibold text-card-foreground mb-3">
-              Turmas Disponíveis ({sections.length})
-            </h3>
-
-            {isLoading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="p-4 rounded-xl border-2 border-border bg-muted/50 animate-pulse">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 w-40 bg-muted rounded" />
-                        <div className="h-3 w-48 bg-muted rounded" />
-                        <div className="h-3 w-32 bg-muted rounded" />
-                      </div>
-                      <div className="h-9 w-24 bg-muted rounded" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : sections.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                Nenhuma turma disponível para esta disciplina no momento.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {sections.map((section, idx) => {
-                  const seatsCount = (section as any)?.seats_count ?? (section.slots ?? 0);
-                  const seatsAccepted = (section as any)?.seats_accepted ?? (section.enrolled ?? 0);
-                  const available = seatsCount - seatsAccepted;
-                  const isFull = available <= 0;
-                  const isAlmostFull = available > 0 && available <= 5;
-                  const isAdded = scheduledItems.some(
-                    item => item.disciplineCode === discipline.code && item.classCode === section.section_code
-                  );
-
-                  return (
-                    <div
-                      key={`${section.course_code || discipline.code}-${section.section_code || idx}`}
-                      className={cn(
-                        "p-4 rounded-xl border-2 transition-all",
-                        isFull ? "border-destructive/50 bg-destructive/5" :
-                        isAlmostFull ? "border-warning/50 bg-warning/5" :
-                        isAdded ? "border-success/50 bg-success/5" :
-                        "border-border bg-muted/50"
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-semibold text-card-foreground">
-                              Turma {section.section_code}
-                            </span>
-                            {isFull && (
-                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-destructive text-destructive-foreground">
-                                Lotada
-                              </span>
-                            )}
-                            {isAdded && (
-                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-success text-success-foreground">
-                                Adicionada
-                              </span>
-                            )}
+            {openClasses && (
+              <>
+                {isLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="p-4 rounded-xl border-2 border-border bg-muted/50 animate-pulse">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 w-40 bg-muted rounded" />
+                            <div className="h-3 w-48 bg-muted rounded" />
+                            <div className="h-3 w-32 bg-muted rounded" />
                           </div>
-                          
-                          <div className="mb-2">
-                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                              <User className="w-4 h-4" />
-                              <span className="truncate block">
-                                {Array.isArray((section as any)?.teachers) && (section as any)?.teachers.length > 0
-                                  ? (section as any).teachers.join(', ')
-                                  : (section.professor || 'Professor(es) a definir')}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          <div className="mt-2 pt-2 border-t border-border">
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <div className="flex items-center gap-1">
-                                <Clock className="w-4 h-4" />
-                                <span>
-                                  {section.schedule_raw
-                                    || (Array.isArray((section as any)?.time_codes) && (section as any).time_codes.length > 0
-                                          ? (section as any).time_codes.join(', ')
-                                          : 'Horário a definir')}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                              <div className="flex items-center gap-1">
-                                <Users className="w-4 h-4" />
-                                <span>{seatsAccepted}/{seatsCount}</span>
-                              </div>
-                            </div>
-                          </div>
+                          <div className="h-9 w-24 bg-muted rounded" />
                         </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : sections.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">Nenhuma turma disponível para esta disciplina no momento.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {sections.map((section, idx) => {
+                      const seatsCount = (section as any)?.seats_count ?? (section.slots ?? 0);
+                      const seatsAccepted = (section as any)?.seats_accepted ?? (section.enrolled ?? 0);
+                      const available = seatsCount - seatsAccepted;
+                      const isFull = available <= 0;
+                      const isAlmostFull = available > 0 && available <= 5;
+                      const isAdded = scheduledItems.some(
+                        (item) => item.disciplineCode === currentCode && item.classCode === section.section_code,
+                      );
 
-                        <button
-                          onClick={() => handleAddClass(section)}
-                          disabled={isFull || isAdded}
+                      return (
+                        <div
+                          key={`${section.course_code || currentCode}-${section.section_code || idx}`}
                           className={cn(
-                            "flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all",
-                            isFull || isAdded
-                              ? "bg-muted text-muted-foreground cursor-not-allowed"
-                              : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25"
+                            'p-4 rounded-xl border-2 transition-all',
+                            isFull
+                              ? 'border-destructive/50 bg-destructive/5'
+                              : isAlmostFull
+                              ? 'border-warning/50 bg-warning/5'
+                              : isAdded
+                              ? 'border-success/50 bg-success/5'
+                              : 'border-border bg-muted/50',
                           )}
                         >
-                          <Plus className="w-4 h-4" />
-                          <span className="hidden sm:inline">Adicionar</span>
-                        </button>
-                      </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-semibold text-card-foreground text-sm">
+                                  {(() => {
+                                    const teachers = Array.isArray((section as any)?.teachers)
+                                      ? (section as any).teachers
+                                      : undefined;
+                                    if (teachers && teachers.length > 0) return teachers[0];
+                                    return section.professor || `Turma ${section.section_code}`;
+                                  })()}
+                                </span>
+                                {isFull && (
+                                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-destructive text-destructive-foreground">Lotada</span>
+                                )}
+                                {isAdded && (
+                                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-success text-success-foreground">Adicionada</span>
+                                )}
+                              </div>
 
-                      {isAlmostFull && !isFull && (
-                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-warning/30 text-warning text-sm">
-                          <AlertCircle className="w-4 h-4" />
-                          <span>Poucas vagas restantes ({available})</span>
+                              {(() => {
+                                const teachers = Array.isArray((section as any)?.teachers)
+                                  ? (section as any).teachers
+                                  : undefined;
+                                if (teachers && teachers.length > 1) {
+                                  const extra = teachers.length - 1;
+                                  return (
+                                    <div className="mb-2">
+                                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                        <Users className="w-4 h-4" />
+                                        <span className="truncate block">+ {extra} professor{extra > 1 ? 'es' : ''}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                if (!teachers || teachers.length === 0) {
+                                  return (
+                                    <div className="mb-2">
+                                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                        <Users className="w-4 h-4" />
+                                        <span className="truncate block">Professor(es) a definir</span>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
+
+                              <div className="mt-2 pt-2 border-t border-border">
+                                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="w-4 h-4" />
+                                    <span>
+                                      {section.schedule_raw ||
+                                        (Array.isArray((section as any)?.time_codes) && (section as any).time_codes.length > 0
+                                          ? (section as any).time_codes.join(', ')
+                                          : 'Horário a definir')}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                                  <div className="flex items-center gap-1">
+                                    <Users className="w-4 h-4" />
+                                    <span>
+                                      {seatsAccepted}/{seatsCount}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => handleAddClass(section)}
+                              disabled={isFull || isAdded}
+                              className={cn(
+                                'flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all',
+                                isFull || isAdded
+                                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                                  : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25',
+                              )}
+                            >
+                              <Plus className="w-4 h-4" />
+                              <span className="hidden sm:inline">Adicionar</span>
+                            </button>
+                          </div>
+
+                          {isAlmostFull && !isFull && (
+                            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-warning/30 text-warning text-sm">
+                              <AlertCircle className="w-4 h-4" />
+                              <span>Poucas vagas restantes ({available})</span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
+
+          {/* Pré-requisitos */}
+          {(currentDetail?.prerequisites?.length || 0) > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-card-foreground">Pré-requisitos</h3>
+                <button
+                  type="button"
+                  onClick={() => setOpenPrereq((v) => !v)}
+                  className="px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted"
+                >
+                  {openPrereq ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {openPrereq && (
+                <>
+                  {(currentDetail?.prerequisites?.length || 0) > 1 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {currentDetail!.prerequisites!.map((_, i) => (
+                        <button
+                          key={`pr-option-${i}`}
+                          className={cn(
+                            'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+                            prereqOptionIndex === i
+                              ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25'
+                              : 'bg-muted text-muted-foreground hover:bg-accent',
+                          )}
+                          onClick={() => setPrereqOptionIndex(i)}
+                        >
+                          {`Opção ${i + 1}`}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-3">
+                    {(currentDetail!.prerequisites![prereqOptionIndex] || []).map((pr) => {
+                      const synced = !!(pr as any).name;
+                      const code = pr.code;
+                      const name = (pr as any).name as string | undefined;
+                      const summary = allCourses.find((c) => c.code === code) || null;
+                      return (
+                        <LargeDisciplineCard
+                          key={`pre-${code}`}
+                          code={code}
+                          synced={synced}
+                          name={name}
+                          summary={summary}
+                          onClick={synced ? () => setStack((prev) => [...prev, { code }]) : undefined}
+                        />
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Correquisitos */}
+          {(currentDetail?.corequisites?.length || 0) > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-card-foreground">Correquisitos</h3>
+                <button
+                  type="button"
+                  onClick={() => setOpenCoreq((v) => !v)}
+                  className="px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted"
+                >
+                  {openCoreq ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {openCoreq && (
+                <>
+                  {(currentDetail?.corequisites?.length || 0) > 1 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {currentDetail!.corequisites!.map((_, i) => (
+                        <button
+                          key={`co-option-${i}`}
+                          className={cn(
+                            'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+                            coreqOptionIndex === i
+                              ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25'
+                              : 'bg-muted text-muted-foreground hover:bg-accent',
+                          )}
+                          onClick={() => setCoreqOptionIndex(i)}
+                        >
+                          {`Opção ${i + 1}`}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-3">
+                    {(currentDetail!.corequisites![coreqOptionIndex] || []).map((co) => {
+                      const synced = !!(co as any).name;
+                      const code = co.code;
+                      const name = (co as any).name as string | undefined;
+                      const summary = allCourses.find((c) => c.code === code) || null;
+                      return (
+                        <LargeDisciplineCard
+                          key={`co-${code}`}
+                          code={code}
+                          synced={synced}
+                          name={name}
+                          summary={summary}
+                          onClick={synced ? () => setStack((prev) => [...prev, { code }]) : undefined}
+                        />
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Equivalentes */}
+          {(currentDetail?.equivalences?.length || 0) > 0 && (() => {
+            // Flatten + dedupe por código
+            const flat = (currentDetail?.equivalences || []).flat();
+            const seen = new Set<string>();
+            const unique = flat.filter((eq) => {
+              if (!eq?.code) return false;
+              if (seen.has(eq.code)) return false;
+              seen.add(eq.code);
+              return true;
+            });
+            if (unique.length === 0) return null;
+            return (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-card-foreground">Equivalentes</h3>
+                  <button
+                    type="button"
+                    onClick={() => setOpenEquiv((v) => !v)}
+                    className="px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted"
+                  >
+                    {openEquiv ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
+                {openEquiv && (
+                  <div className="grid grid-cols-1 gap-3">
+                    {unique.map((eq) => {
+                      const synced = !!(eq as any).name;
+                      const code = eq.code;
+                      const name = (eq as any).name as string | undefined;
+                      const summary = allCourses.find((c) => c.code === code) || null;
+                      return (
+                        <LargeDisciplineCard
+                          key={`eq-${code}`}
+                          code={code}
+                          synced={synced}
+                          name={name}
+                          summary={summary}
+                          onClick={synced ? () => setStack((prev) => [...prev, { code }]) : undefined}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          
         </div>
       </div>
     </div>

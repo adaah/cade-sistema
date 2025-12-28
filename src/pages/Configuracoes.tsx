@@ -2,8 +2,9 @@ import { useRef, useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useApp } from '@/contexts/AppContext';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
-import { Sun, Moon, Trash2, RotateCcw, User, Download, Upload, Check, X } from 'lucide-react';
+import { Sun, Moon, Trash2, RotateCcw, User, Download, Upload, Check, X, Layers } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { useMode } from '@/hooks/useMode';
 
 const Configuracoes = () => {
   const { 
@@ -21,6 +22,7 @@ const Configuracoes = () => {
   const [importSuccess, setImportSuccess] = useState(false);
 
   const hasPrograms = myPrograms.length > 0;
+  const { mode, setMode, isSimplified, isFull } = useMode();
 
   const handleResetAll = () => {
     if (confirm('Tem certeza que deseja resetar todos os dados? Esta ação não pode ser desfeita.')) {
@@ -106,6 +108,48 @@ const Configuracoes = () => {
         </div>
 
         <div className="space-y-6">
+          {/* Mode */}
+          <div className="bg-card rounded-xl border border-border p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Layers className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-card-foreground">Modo de Uso</h3>
+                <p className="text-sm text-muted-foreground">Escolha como você quer usar o CADE</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mb-3">
+              <button
+                onClick={() => setMode('simplified')}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border-2 transition-all ${
+                  mode === 'simplified'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                <span>Simplificado</span>
+              </button>
+              <button
+                onClick={() => setMode('full')}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border-2 transition-all ${
+                  mode === 'full'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                <span>Completo</span>
+              </button>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              {isFull
+                ? 'Acompanhe seu curso por completo: registre cursadas, filtre por disponíveis, gerencie favoritos e monte sua grade com as turmas.'
+                : 'Modo enxuto para a matrícula no SIGAA: pesquise disciplinas e turmas, favorite o essencial e siga direto ao que importa (sem marcar cursadas ou usar filtros avançados).'}
+            </p>
+          </div>
+
           {/* Courses */}
           <div className="bg-card rounded-xl border border-border p-5">
             <div className="flex items-center gap-3 mb-4">

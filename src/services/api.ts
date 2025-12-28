@@ -50,6 +50,16 @@ export interface CourseApi {
   type: string;
 }
 
+interface SyncedCourse {
+  code: string;
+  name: string;
+  id_ref: string;
+}
+
+interface NotSyncedCourse {
+  code: string;
+}
+
 export interface CourseDetail {
   code: string;
   name: string;
@@ -57,13 +67,14 @@ export interface CourseDetail {
   workload?: number;
   semester?: number;
   type?: string;
-  prerequisites?: string[];
   description?: string;
   department?: string;
   mode?: string;
   location?: string;
   id_ref?: string;
-  [key: string]: any;
+  equivalences: Array<Array<NotSyncedCourse | SyncedCourse>>;
+  prerequisites: Array<NotSyncedCourse | SyncedCourse>[];
+  corequisites: Array<NotSyncedCourse | SyncedCourse>[];
 }
 
 export interface ProgramDetail {
