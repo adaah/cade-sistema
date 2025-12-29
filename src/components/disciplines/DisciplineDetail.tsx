@@ -9,6 +9,7 @@ import { useFavoriteCourses } from '@/hooks/useFavoriteCourses';
 import { useEffect, useState } from 'react';
 import { LargeDisciplineCard } from '@/components/disciplines/LargeDisciplineCard';
 import { BreadcrumbTags } from '@/components/disciplines/BreadcrumbTags';
+import { Badge } from '@/components/ui/badge';
 
 interface DisciplineDetailProps {
   discipline: Course;
@@ -121,10 +122,62 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
 
   const isCompleted = completedDisciplines.includes(currentCode);
 
+  // Local UI components (small and focused)
+  const SectionHeader = ({
+    title,
+    count,
+    open,
+    onToggle,
+  }: { title: string; count?: number; open: boolean; onToggle: () => void }) => (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <h3
+          className="font-semibold text-card-foreground cursor-pointer select-none"
+          onClick={onToggle}
+        >
+          {title}
+        </h3>
+        {typeof count === 'number' && (
+          <Badge variant="secondary" className="px-2 py-0.5">
+            {count}
+          </Badge>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted"
+        aria-label={open ? 'Recolher' : 'Expandir'}
+      >
+        {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+    </div>
+  );
+
+  const CollapseAnimated: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open, children }) => (
+    <>{open ? <div className="pt-2">{children}</div> : null}</>
+  );
+
+  const CompletedButton = ({
+    completed,
+    onClick,
+  }: { completed: boolean; onClick: () => void }) => (
+    <button
+      onClick={onClick}
+      className={cn(
+        'mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium',
+        completed ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80',
+      )}
+    >
+      {completed ? <Check className="w-4 h-4" /> : <span className="block w-4 h-4 rounded-full border border-current" />}
+      <span>{completed ? 'Cursada' : 'Marcar como cursada'}</span>
+    </button>
+  );
+
   return (
     <div className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-50 flex items-center justify-end">
       <div className="absolute inset-0" onClick={onClose} />
-      <div className="relative w-full max-w-lg h-full bg-card shadow-elevated animate-slide-in-right overflow-y-auto">
+      <div className="relative w-full max-w-lg h-full bg-card shadow-elevated overflow-y-auto">
         <div className="sticky top-0 bg-card border-b border-border p-6 z-10">
           <button
             onClick={onClose}
@@ -148,12 +201,12 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
             <button
               onClick={() => toggleFavorite(currentCode)}
               className={cn(
-                "p-2 rounded-lg transition-colors",
-                isFavorite(currentCode) ? "text-rose-600 bg-rose-500/10" : "text-muted-foreground hover:bg-muted"
+                'p-2 rounded-lg transition-colors',
+                isFavorite(currentCode) ? 'text-rose-600 bg-rose-500/10' : 'text-muted-foreground hover:bg-muted',
               )}
               aria-label={isFavorite(currentCode) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
             >
-              <Heart className={cn("w-5 h-5", isFavorite(currentCode) && "fill-current")} />
+              <Heart className={cn('w-5 h-5', isFavorite(currentCode) && 'fill-current')} />
             </button>
           </div>
 
@@ -170,18 +223,7 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
             {(currentDetail as any)?.semester && <span>{(currentDetail as any)?.semester}º Semestre</span>}
           </div>
 
-          <button
-            onClick={() => toggleCompletedDiscipline(currentCode)}
-            className={cn(
-              "mt-4 flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
-              isCompleted
-                ? "bg-success text-success-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            )}
-          >
-            <Check className="w-4 h-4" />
-            {isCompleted ? 'Cursada' : 'Marcar como cursada'}
-          </button>
+          <CompletedButton completed={isCompleted} onClick={() => toggleCompletedDiscipline(currentCode)} />
         </div>
 
         <div className="p-6 space-y-6">
@@ -196,24 +238,18 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
 
           {/* Turmas Disponíveis com collapse */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-card-foreground">Turmas Disponíveis ({sections.length})</h3>
-              <button
-                type="button"
-                onClick={() => setOpenClasses((v) => !v)}
-                className="px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted"
-                aria-label={openClasses ? 'Recolher' : 'Expandir'}
-              >
-                {openClasses ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-            </div>
+            <SectionHeader
+              title="Turmas Disponíveis"
+              count={sections.length}
+              open={openClasses}
+              onToggle={() => setOpenClasses((v) => !v)}
+            />
 
-            {openClasses && (
-              <>
+            <CollapseAnimated open={openClasses}>
                 {isLoading ? (
                   <div className="space-y-3">
                     {[...Array(3)].map((_, i) => (
-                      <div key={i} className="p-4 rounded-xl border-2 border-border bg-muted/50 animate-pulse">
+                      <div key={i} className="p-4 rounded-xl border-2 border-border bg-muted/50">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1 space-y-2">
                             <div className="h-4 w-40 bg-muted rounded" />
@@ -338,7 +374,7 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                               <Plus className="w-4 h-4" />
                               <span className="hidden sm:inline">Adicionar</span>
                             </button>
-                          </div>
+                            </div>
 
                           {isAlmostFull && !isFull && (
                             <div className="flex items-center gap-2 mt-3 pt-3 border-t border-warning/30 text-warning text-sm">
@@ -351,28 +387,22 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                     })}
                   </div>
                 )}
-              </>
-            )}
+            </CollapseAnimated>
           </div>
 
           {/* Pré-requisitos */}
           {(currentDetail?.prerequisites?.length || 0) > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-card-foreground">Pré-requisitos</h3>
-                <button
-                  type="button"
-                  onClick={() => setOpenPrereq((v) => !v)}
-                  className="px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted"
-                >
-                  {openPrereq ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              </div>
+              <SectionHeader
+                title="Pré-requisitos"
+                count={currentDetail?.prerequisites?.length}
+                open={openPrereq}
+                onToggle={() => setOpenPrereq((v) => !v)}
+              />
 
-              {openPrereq && (
-                <>
+              <CollapseAnimated open={openPrereq}>
                   {(currentDetail?.prerequisites?.length || 0) > 1 && (
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap mb-3">
                       {currentDetail!.prerequisites!.map((_, i) => (
                         <button
                           key={`pr-option-${i}`}
@@ -408,29 +438,23 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                       );
                     })}
                   </div>
-                </>
-              )}
+              </CollapseAnimated>
             </div>
           )}
 
           {/* Correquisitos */}
           {(currentDetail?.corequisites?.length || 0) > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-card-foreground">Correquisitos</h3>
-                <button
-                  type="button"
-                  onClick={() => setOpenCoreq((v) => !v)}
-                  className="px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted"
-                >
-                  {openCoreq ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              </div>
+              <SectionHeader
+                title="Correquisitos"
+                count={currentDetail?.corequisites?.length}
+                open={openCoreq}
+                onToggle={() => setOpenCoreq((v) => !v)}
+              />
 
-              {openCoreq && (
-                <>
+              <CollapseAnimated open={openCoreq}>
                   {(currentDetail?.corequisites?.length || 0) > 1 && (
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap mb-3">
                       {currentDetail!.corequisites!.map((_, i) => (
                         <button
                           key={`co-option-${i}`}
@@ -466,8 +490,7 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                       );
                     })}
                   </div>
-                </>
-              )}
+              </CollapseAnimated>
             </div>
           )}
 
@@ -485,17 +508,13 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
             if (unique.length === 0) return null;
             return (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-card-foreground">Equivalentes</h3>
-                  <button
-                    type="button"
-                    onClick={() => setOpenEquiv((v) => !v)}
-                    className="px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted"
-                  >
-                    {openEquiv ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
-                </div>
-                {openEquiv && (
+                <SectionHeader
+                  title="Equivalentes"
+                  count={unique.length}
+                  open={openEquiv}
+                  onToggle={() => setOpenEquiv((v) => !v)}
+                />
+                <CollapseAnimated open={openEquiv}>
                   <div className="grid grid-cols-1 gap-3">
                     {unique.map((eq) => {
                       const synced = !!(eq as any).name;
@@ -514,7 +533,7 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                       );
                     })}
                   </div>
-                )}
+                </CollapseAnimated>
               </div>
             );
           })()}
