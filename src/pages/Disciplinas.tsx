@@ -18,6 +18,7 @@ import { useFilter } from '@/hooks/useFilter';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const Disciplinas = () => {
   const { completedDisciplines, toggleCompletedDiscipline } = useApp();
@@ -63,6 +64,7 @@ const Disciplinas = () => {
     ...(!isSimplified ? [{ id: 'completed', label: 'Cursadas' }] as const : []),
     { id: 'not_completed', label: 'Não Concluídas' },
     { id: 'favorites', label: 'Favoritos' },
+    { id: 'offered', label: 'Ofertada' },
   ];
 
   // Build rules map for useFilter (excluding 'favorites' which controls layout)
@@ -71,9 +73,13 @@ const Disciplinas = () => {
     not_completed: (c: Course) => !completedDisciplines.includes(c.code),
     available: (c: Course) => canTake(c.code),
     favorites: (c: Course) => favoriteCodes.includes(c.code),
+    offered: (c: Course) => (c.sections_count ?? 0) > 0,
   }), [completedDisciplines, favoriteCodes]);
 
   const { isActive, isOnly, isAll, activeIds, apply, toggle } = useFilter<Course>({ rules });
+
+  // Order select state: 'name' (default) | 'sections'
+  const [orderBy, setOrderBy] = useState<'name' | 'sections'>('name');
 
   return (
     <MainLayout>
@@ -116,14 +122,30 @@ const Disciplinas = () => {
 
         <Collapsible defaultOpen={false}>
           <div className="mb-2 flex items-center justify-between gap-3 max-w-[100vw] overflow-x-auto">
-            <CollapsibleTrigger className={cn(
-              'inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-card hover:bg-accent text-sm font-medium'
-            )}>
-              <span>Filtros</span>
-              <Badge variant={isAll ? 'outline' : 'secondary'}>
-                {activeIds.length}
-              </Badge>
-            </CollapsibleTrigger>
+            <div className="flex items-center gap-2">
+              <CollapsibleTrigger className={cn(
+                'inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-card hover:bg-accent text-sm font-medium'
+              )}>
+                <span>Filtros</span>
+                <Badge variant={isAll ? 'outline' : 'secondary'}>
+                  {activeIds.length}
+                </Badge>
+              </CollapsibleTrigger>
+              {/* Ordem dropdown */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Ordem:</span>
+                {/* Using Select component with styles matching filter button */}
+                <Select value={orderBy} onValueChange={(v: 'name' | 'sections') => setOrderBy(v)}>
+                  <SelectTrigger className="h-9 w-auto min-w-[9rem] rounded-xl border border-border bg-card hover:bg-accent text-sm font-medium px-3">
+                    <SelectValue placeholder="Por Nome" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sections">Por Turmas</SelectItem>
+                    <SelectItem value="name">Por Nome</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="inline-flex items-stretch text-sm shrink-0">
               {([
                 { id: 'all', label: 'Todos' },
@@ -213,6 +235,15 @@ const Disciplinas = () => {
                   (c.type || '').toString().toLowerCase().includes(matchKey),
                 );
               }
+              // Apply ordering
+              filteredSemesterCourses = [...filteredSemesterCourses].sort((a, b) => {
+                if (orderBy === 'sections') {
+                  const diff = (b.sections_count ?? 0) - (a.sections_count ?? 0);
+                  if (diff !== 0) return diff;
+                  return a.name.localeCompare(b.name);
+                }
+                return a.name.localeCompare(b.name);
+              });
 
               if (filteredSemesterCourses.length === 0) return null;
 
@@ -222,7 +253,7 @@ const Disciplinas = () => {
                     {getSemesterTitle(level)}
                   </h3>
                   
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {filteredSemesterCourses.map((course) => {
                       const completed = completedDisciplines.includes(course.code);
                       const available = canTake(course.code);
