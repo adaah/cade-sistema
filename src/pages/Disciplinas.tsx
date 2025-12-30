@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Search, AlertCircle } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { reduce, append } from 'ramda'
 import { MainLayout } from '@/components/layout/MainLayout';
 import { DisciplineCard } from '@/components/disciplines/DisciplineCard';
@@ -80,6 +81,8 @@ const Disciplinas = () => {
 
   // Order select state: 'name' (default) | 'sections'
   const [orderBy, setOrderBy] = useState<'name' | 'sections'>('name');
+  
+  
 
   return (
     <MainLayout>
@@ -134,7 +137,6 @@ const Disciplinas = () => {
               {/* Ordem dropdown */}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Ordem:</span>
-                {/* Using Select component with styles matching filter button */}
                 <Select value={orderBy} onValueChange={(v: 'name' | 'sections') => setOrderBy(v)}>
                   <SelectTrigger className="h-9 w-auto min-w-[9rem] rounded-xl border border-border bg-card hover:bg-accent text-sm font-medium px-3">
                     <SelectValue placeholder="Por Nome" />
@@ -216,6 +218,7 @@ const Disciplinas = () => {
           </div>
         ) : courses.length > 0 ? (
           <div className="space-y-6">
+            <AnimatePresence initial={false}>
             {(() => {
               const optCheck = (l: string) => /optat/i.test(l);
               const orderedLevels = [
@@ -248,12 +251,20 @@ const Disciplinas = () => {
               if (filteredSemesterCourses.length === 0) return null;
 
               return (
-                <div key={level} className="bg-card rounded-xl border border-border p-4">
+                <motion.div
+                  key={level}
+                  initial={{ opacity: 0, x: -16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 16 }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                  className="bg-card rounded-xl border border-border p-4"
+                >
                   <h3 className="font-semibold text-card-foreground mb-4 pb-2 border-b border-border">
                     {getSemesterTitle(level)}
                   </h3>
                   
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <AnimatePresence mode="popLayout">
                     {filteredSemesterCourses.map((course) => {
                       const completed = completedDisciplines.includes(course.code);
                       const available = canTake(course.code);
@@ -262,19 +273,30 @@ const Disciplinas = () => {
                       const blockedProp = isSimplified ? false : blocked;
 
                       return (
-                        <DisciplineCard
+                        <motion.div
                           key={course.code}
-                          discipline={course}
-                          available={availableProp}
-                          blocked={blockedProp}
-                          onClick={() => setSelectedDiscipline(course)}
-                        />
+                          layout
+                          layoutId={`course-${course.code}`}
+                          initial={{ opacity: 0, scale: 0.98 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.98 }}
+                          transition={{ duration: 0.35, ease: 'easeOut' }}
+                        >
+                          <DisciplineCard
+                            discipline={course}
+                            available={availableProp}
+                            blocked={blockedProp}
+                            onClick={() => setSelectedDiscipline(course)}
+                          />
+                        </motion.div>
                       );
                     })}
+                    </AnimatePresence>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
+            </AnimatePresence>
           </div>
         ) : (
           <div className="text-center py-12">

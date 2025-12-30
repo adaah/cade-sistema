@@ -1,4 +1,5 @@
 import { Clock, Check, Users, Heart } from 'lucide-react';
+import { motion, AnimatePresence, useAnimationControls } from 'motion/react';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 import { Course } from '@/services/api';
@@ -23,8 +24,15 @@ export function DisciplineCard({ discipline, onClick, available, blocked }: Disc
   const showBlocked = !isSimplified && !!blocked;
   const showAvailable = isSimplified ? !isCompleted : !!available;
 
+  const heartControls = useAnimationControls();
+
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
       className={cn(
         "group relative bg-card rounded-xl border border-border px-4 pt-4 pb-3 sm:px-5 sm:pt-5 sm:pb-4 cursor-pointer",
         "flex h-full flex-col",
@@ -49,20 +57,28 @@ export function DisciplineCard({ discipline, onClick, available, blocked }: Disc
           {discipline.code}
         </span>
         <div className="flex items-center gap-1">
-          <button
+          <motion.button
             onClick={(e) => {
               e.stopPropagation();
               toggleFavorite(discipline.code);
+              heartControls.start({
+                scale: [1, 1.25, 1],
+                transition: { duration: 0.25, repeat: 2, repeatType: 'loop' },
+              });
             }}
             className={cn(
               "p-2 rounded-lg transition-colors",
               favorite ? "text-rose-600 bg-rose-500/10" : "text-muted-foreground hover:bg-muted"
             )}
             aria-label={favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+            whileHover={{ scale: 1.12 }}
+            whileTap={{ scale: 0.95 }}
           >
-            <Heart className={cn("w-4 h-4", favorite && "fill-current")}/>
-          </button>
-          <button
+            <motion.span animate={heartControls} className="inline-flex">
+              <Heart className={cn("w-4 h-4", favorite && "fill-current")} />
+            </motion.span>
+          </motion.button>
+          <motion.button
             onClick={(e) => {
               e.stopPropagation();
               toggleCompletedDiscipline(discipline.code);
@@ -73,13 +89,27 @@ export function DisciplineCard({ discipline, onClick, available, blocked }: Disc
                 ? "text-success bg-success/10"
                 : "text-muted-foreground hover:bg-muted"
             )}
+            whileHover={{ scale: 1.08 }}
           >
-            {isCompleted ? (
-              <Check className="w-4 h-4" />
-            ) : (
-              <span className="block w-4 h-4 rounded-full border border-current" />
-            )}
-          </button>
+            <span className="relative block w-4 h-4">
+              {/* Static circle border always present */}
+              <span className="absolute inset-0 rounded-full border border-current" />
+              <AnimatePresence mode="wait" initial={false}>
+                {isCompleted && (
+                  <motion.span
+                    key="check"
+                    className="absolute inset-0 flex items-center justify-center"
+                    initial={{ opacity: 0, scale: 0.6, rotate: -180 }}
+                    animate={{ opacity: 1, scale: [0.6, 1.1, 1], rotate: 0 }}
+                    exit={{ opacity: 0, scale: 0.7, rotate: -180 }}
+                    transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </span>
+          </motion.button>
         </div>
       </div>
 
@@ -110,11 +140,23 @@ export function DisciplineCard({ discipline, onClick, available, blocked }: Disc
       {/* Rodapé compacto com status e contador de turmas */}
       <div className="mt-2 pt-1 border-t border-border">
         <div className="flex items-center justify-between">
-          {isCompleted && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-success/10 text-success text-[10px] sm:text-xs font-medium">
-              Cursada
-            </span>
-          )}
+          {/* Reserve space to avoid layout shift (empty component) */}
+          <div className="h-5 sm:h-6 flex items-center">
+            <AnimatePresence mode="popLayout" initial={false}>
+              {isCompleted && (
+                <motion.span
+                  key="tag-cursada"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.25 }}
+                  className="inline-flex items-center px-2 py-0.5 rounded-md bg-success/10 text-success text-[10px] sm:text-xs font-medium"
+                >
+                  Cursada
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
           <div className="flex-1" />
           <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground">
             <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -122,6 +164,6 @@ export function DisciplineCard({ discipline, onClick, available, blocked }: Disc
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
