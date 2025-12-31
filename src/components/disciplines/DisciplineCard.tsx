@@ -1,10 +1,11 @@
-import { Clock, Check, Users, Heart } from 'lucide-react';
-import { motion, AnimatePresence, useAnimationControls } from 'motion/react';
+import { Clock, Check, Users } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 import { Course } from '@/services/api';
 import { useMode } from '@/hooks/useMode';
 import { useFavoriteCourses } from '@/hooks/useFavoriteCourses';
+import { FavoriteButton } from '@/components/common/FavoriteButton';
 
 interface DisciplineCardProps {
   discipline: Course;
@@ -23,8 +24,6 @@ export function DisciplineCard({ discipline, onClick, available, blocked }: Disc
   const showCompletedStyles = isCompleted;
   const showBlocked = !isSimplified && !!blocked;
   const showAvailable = isSimplified ? !isCompleted : !!available;
-
-  const heartControls = useAnimationControls();
 
   return (
     <motion.div
@@ -57,27 +56,10 @@ export function DisciplineCard({ discipline, onClick, available, blocked }: Disc
           {discipline.code}
         </span>
         <div className="flex items-center gap-1">
-          <motion.button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleFavorite(discipline.code);
-              heartControls.start({
-                scale: [1, 1.25, 1],
-                transition: { duration: 0.25, repeat: 2, repeatType: 'loop' },
-              });
-            }}
-            className={cn(
-              "p-2 rounded-lg transition-colors",
-              favorite ? "text-rose-600 bg-rose-500/10" : "text-muted-foreground hover:bg-muted"
-            )}
-            aria-label={favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-            whileHover={{ scale: 1.12 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <motion.span animate={heartControls} className="inline-flex">
-              <Heart className={cn("w-4 h-4", favorite && "fill-current")} />
-            </motion.span>
-          </motion.button>
+          <FavoriteButton
+            active={favorite}
+            onToggle={() => toggleFavorite(discipline.code)}
+          />
           <motion.button
             onClick={(e) => {
               e.stopPropagation();

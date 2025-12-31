@@ -1,4 +1,4 @@
-import { X, Clock, Users, Plus, AlertCircle, Check, Heart, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Clock, Users, Plus, AlertCircle, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { Course, parseSigaaSchedule } from '@/services/api';
 import type { Section } from '@/services/api';
 import { useCourseSections, useCourseByCode, useCourses } from '@/hooks/useApi';
@@ -6,10 +6,58 @@ import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { useFavoriteCourses } from '@/hooks/useFavoriteCourses';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LargeDisciplineCard } from '@/components/disciplines/LargeDisciplineCard';
 import { BreadcrumbTags } from '@/components/disciplines/BreadcrumbTags';
 import { Badge } from '@/components/ui/badge';
+import { motion, useAnimationControls } from 'motion/react';
+import { FavoriteButton } from '@/components/common/FavoriteButton';
+// Extracted component to keep identity stable across renders
+function CompletedButton({
+  completed,
+  onClick,
+}: { completed: boolean; onClick: () => void }) {
+  const controls = useAnimationControls();
+  const didMount = useRef(false);
+
+  useEffect(() => {
+    if (!didMount.current) {
+      didMount.current = true;
+      return; // avoid animating on first mount
+    }
+    // Refined symmetric elastic: expand horizontally from center, slight vertical counter-stretch
+    const scaleX = [1, 1.18, 0.92, 1.06, 1];
+    const scaleY = [1, 0.92, 1.06, 0.98, 1];
+    controls.start({
+      scaleX,
+      scaleY,
+      transition: {
+        duration: 0.6,
+        times: [0, 0.35, 0.6, 0.85, 1],
+        ease: [0.22, 1, 0.36, 1],
+      },
+    });
+  }, [completed, controls]);
+
+  return (
+    <motion.button
+      onClick={onClick}
+      animate={controls}
+      whileHover={{ scale: 1.02 }}
+      className={cn(
+        'mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium origin-center transform-gpu will-change-transform',
+        completed ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80',
+      )}
+    >
+      {completed ? (
+        <Check className="w-4 h-4" />
+      ) : (
+        <span className="block w-4 h-4 rounded-full border border-current" />
+      )}
+      <span>{completed ? 'Cursada' : 'Marcar como cursada'}</span>
+    </motion.button>
+  );
+}
 
 interface DisciplineDetailProps {
   discipline: Course;
@@ -158,21 +206,7 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
     <>{open ? <div className="pt-2">{children}</div> : null}</>
   );
 
-  const CompletedButton = ({
-    completed,
-    onClick,
-  }: { completed: boolean; onClick: () => void }) => (
-    <button
-      onClick={onClick}
-      className={cn(
-        'mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium',
-        completed ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80',
-      )}
-    >
-      {completed ? <Check className="w-4 h-4" /> : <span className="block w-4 h-4 rounded-full border border-current" />}
-      <span>{completed ? 'Cursada' : 'Marcar como cursada'}</span>
-    </button>
-  );
+  
 
   return (
     <div className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-50 flex items-center justify-end">
@@ -198,16 +232,11 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
           
           <div className="flex items-center justify-between gap-3 pr-10">
             <h2 className="text-xl font-bold text-card-foreground">{currentName}</h2>
-            <button
-              onClick={() => toggleFavorite(currentCode)}
-              className={cn(
-                'p-2 rounded-lg transition-colors',
-                isFavorite(currentCode) ? 'text-rose-600 bg-rose-500/10' : 'text-muted-foreground hover:bg-muted',
-              )}
-              aria-label={isFavorite(currentCode) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-            >
-              <Heart className={cn('w-5 h-5', isFavorite(currentCode) && 'fill-current')} />
-            </button>
+            <FavoriteButton
+              active={isFavorite(currentCode)}
+              onToggle={() => toggleFavorite(currentCode)}
+              iconClassName="w-5 h-5"
+            />
           </div>
 
           <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">

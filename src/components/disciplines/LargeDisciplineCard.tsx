@@ -1,8 +1,9 @@
-import { Clock, Check, Users, Heart } from 'lucide-react';
+import { Clock, Check, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useFavoriteCourses } from '@/hooks/useFavoriteCourses';
 import { Course } from '@/services/api';
+import { FavoriteButton } from '@/components/common/FavoriteButton';
 
 interface LargeDisciplineCardProps {
   // Código da disciplina (obrigatório em ambos os casos)
@@ -72,16 +73,7 @@ export function LargeDisciplineCard({ code, synced = false, name, summary, onCli
       <div className="flex items-center justify-between mb-1">
         <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-muted text-muted-foreground">{code}</span>
         <div className="flex items-center gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleFavorite(code);
-            }}
-            className={cn('p-2 rounded-lg transition-colors', favorite ? 'text-rose-600 bg-rose-500/10' : 'text-muted-foreground hover:bg-muted')}
-            aria-label={favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-          >
-            <Heart className={cn('w-4 h-4', favorite && 'fill-current')} />
-          </button>
+          <FavoriteButton active={favorite} onToggle={() => toggleFavorite(code)} />
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -120,4 +112,3 @@ export function LargeDisciplineCard({ code, synced = false, name, summary, onCli
     </div>
   );
 }
-
