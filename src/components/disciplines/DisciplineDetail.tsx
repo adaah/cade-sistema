@@ -254,6 +254,7 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                           section={section}
                           isAdded={isAdded}
                           onAdd={() => handleAddClass(section)}
+                          onNavigateCourse={(code) => setStack((prev) => [...prev, { code }])}
                         />
                       );
                     })}

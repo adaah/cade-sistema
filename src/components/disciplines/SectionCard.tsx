@@ -8,10 +8,11 @@ interface SectionCardProps {
   section: Section;
   isAdded: boolean;
   onAdd: (section: Section) => void;
+  onNavigateCourse?: (courseCode: string) => void;
 }
 
-export function SectionCard({ section, isAdded, onAdd }: SectionCardProps) {
-  const { hasSectionOnCourse } = useMySections();
+export function SectionCard({ section, isAdded, onAdd, onNavigateCourse }: SectionCardProps) {
+  const { hasSectionOnCourse, getConflictsForSection } = useMySections();
   const { completedDisciplines } = useApp();
   const seatsCount = section.seats_count;
   const seatsAccepted = section.seats_accepted;
@@ -20,6 +21,9 @@ export function SectionCard({ section, isAdded, onAdd }: SectionCardProps) {
   const isAlmostFull = available > 0 && available <= 5;
 
   const teachers = section.teachers ?? []
+
+  // Compute time conflicts via helper
+  const conflicts = getConflictsForSection(section);
 
   return (
     <div
@@ -54,6 +58,11 @@ export function SectionCard({ section, isAdded, onAdd }: SectionCardProps) {
             {isAdded && (
               <span className="px-2 py-0.5 rounded text-xs font-medium bg-success text-success-foreground">
                 Adicionada
+              </span>
+            )}
+            {!isFull && conflicts.length > 0 && (
+              <span className="px-2 py-0.5 rounded text-xs font-medium bg-warning text-warning-foreground">
+                Conflito
               </span>
             )}
           </div>
@@ -103,6 +112,30 @@ export function SectionCard({ section, isAdded, onAdd }: SectionCardProps) {
                 </span>
               </div>
             </div>
+
+            {(() => {
+              if (conflicts.length === 0) return null;
+              const currentCourseCode = section.course?.code;
+              const uniqueCodes = Array.from(new Set(
+                conflicts
+                  .map((c) => c.section.course?.code)
+                  .filter((code): code is string => Boolean(code) && code !== currentCourseCode)
+              ));
+              if (uniqueCodes.length === 0) return null;
+              return (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {uniqueCodes.map((code) => (
+                    <button
+                      key={`conf-${code}`}
+                      onClick={() => onNavigateCourse?.(code)}
+                      className="px-2 py-0.5 rounded text-xs font-medium bg-accent text-accent-foreground hover:bg-accent/80 border border-border"
+                    >
+                      {code}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -148,11 +181,13 @@ export function SectionCard({ section, isAdded, onAdd }: SectionCardProps) {
                   'flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all',
                   isFull
                     ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                    : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25',
+                    : conflicts.length > 0
+                      ? 'bg-warning text-warning-foreground hover:bg-warning/90 shadow-lg shadow-warning/25'
+                      : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25',
                 )}
               >
                 <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Adicionar</span>
+                <span className="hidden sm:inline">{conflicts.length > 0 ? 'Sobrescrever' : 'Adicionar'}</span>
               </button>
             );
           })()}

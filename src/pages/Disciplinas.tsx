@@ -10,7 +10,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useSections } from '@/hooks/useApi';
 import { useMyCourses } from '@/hooks/useMyCourses';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
-import { Course } from '@/services/api';
+import {Course, CourseApi} from '@/services/api';
 import {cn, getSemesterTitle} from '@/lib/utils';
 import { fuzzyFilter } from '@/lib/fuzzy';
 import { useMode } from '@/hooks/useMode';
@@ -157,7 +157,7 @@ const Disciplinas = () => {
                 <button
                   key={b.id}
                   type="button"
-                  onClick={() => setTypeFilter(b.id as any)}
+                  onClick={() => setTypeFilter(b.id)}
                   className={cn(
                     'px-2.5 py-1.5 border border-border -ml-px first:ml-0',
                     idx === 0 ? 'rounded-l-xl' : '',
@@ -228,7 +228,7 @@ const Disciplinas = () => {
               return orderedLevels;
             })().map((level) => {
               const semesterCourses = coursesByLevel[level] || [];
-              const searched = fuzzyFilter(semesterCourses, search, ['name', 'code']);
+              const searched = fuzzyFilter<CourseApi>(semesterCourses, search, ['name', 'code']);
               // Apply AND filters (favorites, completed, available, etc.)
               let filteredSemesterCourses = apply(searched);
               // Apply type group (exclusive)
