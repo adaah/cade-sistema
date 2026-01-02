@@ -5,7 +5,6 @@ import {
   fetchSections, 
   fetchCourseDetail,
   fetchCourseByCode,
-  fetchCourseSections,
   fetchSectionsByCourseCode,
   fetchProgramDetail,
   getProgramCourseCodes,
@@ -65,16 +64,6 @@ export function useCourseByCode(code: string | null | undefined) {
     enabled: !!code,
     staleTime: 1000 * 60 * 60,
     gcTime: 1000 * 60 * 60 * 24,
-  });
-}
-
-export function useCourseSectionsByUrl(sectionsUrl: string | null | undefined) {
-  return useQuery<Section[], Error>({
-    queryKey: ['course-sections', sectionsUrl],
-    queryFn: () => sectionsUrl ? fetchCourseSections(sectionsUrl) : Promise.reject(new Error('URL não fornecida')),
-    enabled: !!sectionsUrl,
-    staleTime: 1000 * 60 * 5,
-    gcTime: 1000 * 60 * 60,
   });
 }
 

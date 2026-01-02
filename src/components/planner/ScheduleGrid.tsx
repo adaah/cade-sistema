@@ -1,6 +1,7 @@
-import { useApp } from '@/contexts/AppContext';
+import { useMySections } from '@/hooks/useMySections';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
+import { parseSigaaSchedule } from '@/services/api';
 
 const days = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const hours = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
@@ -14,8 +15,85 @@ const dayMap: Record<string, string> = {
   'Sáb': 'Sáb'
 };
 
+type ScheduledItem = {
+  disciplineCode: string;
+  disciplineName: string;
+  classCode: string;
+  professor: string;
+  schedule: string;
+  color: string;
+  day: string;
+  startTime: string;
+  endTime: string;
+};
+
+const COLORS = [
+  'hsl(217, 91%, 60%)',
+  'hsl(142, 71%, 45%)',
+  'hsl(280, 65%, 60%)',
+  'hsl(0, 72%, 51%)',
+  'hsl(38, 92%, 50%)',
+  'hsl(180, 65%, 45%)',
+  'hsl(320, 65%, 52%)',
+  'hsl(45, 93%, 47%)',
+];
+
+function colorFor(code: string) {
+  let hash = 0;
+  for (let i = 0; i < code.length; i++) hash = ((hash << 5) - hash) + code.charCodeAt(i);
+  const idx = Math.abs(hash) % COLORS.length;
+  return COLORS[idx];
+}
+
 export function ScheduleGrid() {
-  const { scheduledItems, removeFromSchedule } = useApp();
+  const { mySections, toggleSection } = useMySections();
+
+  const scheduledItems: ScheduledItem[] = [];
+  for (const s of mySections) {
+    const disciplineCode = (s as any)?.course?.code || (s as any)?.course_code || '';
+    const disciplineName = (s as any)?.course?.name || disciplineCode;
+    const classCode = (s as any)?.section_code || s.id_ref;
+    const professor = (s as any)?.professor || '';
+    const raw = (s as any)?.schedule_raw || (Array.isArray((s as any)?.time_codes) ? (s as any).time_codes.join(' ') : '');
+    const parsed = raw ? parseSigaaSchedule(raw) : [];
+    if (parsed.length > 0) {
+      for (const sched of parsed) {
+        scheduledItems.push({
+          disciplineCode,
+          disciplineName,
+          classCode,
+          professor,
+          schedule: raw,
+          color: colorFor(disciplineCode),
+          day: sched.day,
+          startTime: sched.start_time,
+          endTime: sched.end_time,
+        });
+      }
+    } else {
+      // Fallback placeholder
+      scheduledItems.push({
+        disciplineCode,
+        disciplineName,
+        classCode,
+        professor,
+        schedule: raw || 'Horário a definir',
+        color: colorFor(disciplineCode),
+        day: 'Seg',
+        startTime: '08:00',
+        endTime: '10:00',
+      });
+    }
+  }
+
+  const removeFromSchedule = (disciplineCode: string, classCode: string) => {
+    const target = mySections.find((sec) => {
+      const dc = (sec as any)?.course?.code || (sec as any)?.course_code;
+      const cc = (sec as any)?.section_code || sec.id_ref;
+      return dc === disciplineCode && cc === classCode;
+    });
+    if (target) toggleSection(target);
+  };
 
   const getItemsForSlot = (day: string, hour: string) => {
     return scheduledItems.filter(item => {

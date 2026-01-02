@@ -16,7 +16,7 @@ import { fuzzyFilter } from '@/lib/fuzzy';
 
 const Planejador = () => {
   const isMobile = useIsMobile();
-  const { scheduledItems } = useApp();
+  // no scheduledItems here; state moved to useMySections
   const { myPrograms } = useMyPrograms();
   const { courses, isLoading: loadingCourses } = useMyCourses();
   // Não carregar sections.json na tela de planejador
@@ -33,8 +33,8 @@ const Planejador = () => {
     // Primeiro, aplica filtros por disponibilidade e período
     const byAvailabilityAndPeriod = courses.filter((course) => {
       const courseSections = sections.filter((s) => {
-        const available = (s.slots ?? 0) - (s.enrolled ?? 0);
-        return s.course_code === course.code && available > 0;
+        const available = ((s as any).slots ?? 0) - ((s as any).enrolled ?? 0);
+        return ((s as any)?.course?.code || (s as any)?.course_code) === course.code && available > 0;
       });
 
       if (courseSections.length === 0) return false;
@@ -61,8 +61,8 @@ const Planejador = () => {
   // Sections para a disciplina selecionada serão carregadas pelo DisciplineDetail
 
   const getCourseStats = (courseCode: string) => {
-    const courseSections = sections?.filter(s => s.course_code === courseCode) || [];
-    const totalSpots = courseSections.reduce((sum, s) => sum + ((s.slots ?? 0) - (s.enrolled ?? 0)), 0);
+    const courseSections = sections?.filter(s => ((s as any)?.course?.code || (s as any)?.course_code) === courseCode) || [];
+    const totalSpots = courseSections.reduce((sum, s) => sum + ((((s as any).slots ?? 0) - ((s as any).enrolled ?? 0))), 0);
     return { sectionCount: courseSections.length, availableSpots: totalSpots };
   };
 

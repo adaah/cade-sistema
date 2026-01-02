@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useApp } from '@/contexts/AppContext';
+import { useMySections } from '@/hooks/useMySections';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { Sun, Moon, Trash2, RotateCcw, User, Download, Upload, Check, X, Layers } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
@@ -11,11 +12,11 @@ const Configuracoes = () => {
     theme, 
     toggleTheme, 
     setIsOnboarded,
-    clearSchedule,
     completedDisciplines,
     exportSettings,
     importSettings
   } = useApp();
+  const { clearSections } = useMySections();
   
   const { myPrograms, removeProgram } = useMyPrograms();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,7 +33,7 @@ const Configuracoes = () => {
   };
 
   const handleClearSchedule = () => {
-    clearSchedule();
+    clearSections();
     toast({
       title: "Grade limpa",
       description: "Todas as turmas foram removidas do planejador."

@@ -1,13 +1,15 @@
-import { X, Clock, Users, Plus, AlertCircle, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Check, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { Course, parseSigaaSchedule } from '@/services/api';
 import type { Section } from '@/services/api';
 import { useCourseSections, useCourseByCode, useCourses } from '@/hooks/useApi';
 import { useApp } from '@/contexts/AppContext';
+import { useMySections } from '@/hooks/useMySections';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { useFavoriteCourses } from '@/hooks/useFavoriteCourses';
 import { useEffect, useRef, useState } from 'react';
 import { LargeDisciplineCard } from '@/components/disciplines/LargeDisciplineCard';
+import { SectionCard } from '@/components/disciplines/SectionCard';
 import { BreadcrumbTags } from '@/components/disciplines/BreadcrumbTags';
 import { Badge } from '@/components/ui/badge';
 import { motion, useAnimationControls } from 'motion/react';
@@ -65,7 +67,8 @@ interface DisciplineDetailProps {
 }
 
 export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps) {
-  const { scheduledItems, addToSchedule, completedDisciplines, toggleCompletedDiscipline } = useApp();
+  const { completedDisciplines, toggleCompletedDiscipline } = useApp();
+  const { mySections, toggleSection } = useMySections();
   // Estado local para navegação dentro do drawer
   const [stack, setStack] = useState<{ code: string }[]>([{ code: discipline.code }]);
   const currentCode = stack[stack.length - 1]?.code || discipline.code;
@@ -108,64 +111,13 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
   const { isFavorite, toggleFavorite } = useFavoriteCourses();
 
   const handleAddClass = (section: Section) => {
-    const isAlreadyAdded = scheduledItems.some(
-      (item) => item.disciplineCode === currentCode && item.classCode === section.section_code,
-    );
-
-    if (isAlreadyAdded) {
-      toast({
-        title: "Turma já adicionada",
-        description: `${currentName} (${section.section_code}) já está no seu planejador.`,
-        variant: "destructive"
-      });
-      return;
-    }
-
-    let schedules = section.schedule;
-    
-    if ((!schedules || schedules.length === 0) && section.schedule_raw) {
-      schedules = parseSigaaSchedule(section.schedule_raw);
-    }
-
-    if (schedules && schedules.length > 0) {
-      schedules.forEach(sched => {
-        addToSchedule({
-          disciplineCode: currentCode,
-          disciplineName: currentName,
-          classCode: section.section_code,
-          professor: section.professor,
-          schedule: section.schedule_raw || `${sched.day} ${sched.start_time}-${sched.end_time}`,
-          color: '',
-          day: sched.day,
-          startTime: sched.start_time,
-          endTime: sched.end_time
-        });
-      });
-
-      toast({
-        title: "Turma adicionada!",
-        description: `${currentName} (${section.section_code}) foi adicionada ao planejador.`,
-      });
-    } else {
-      const timeCodes = Array.isArray((section as any)?.time_codes) ? (section as any).time_codes.join(', ') : null;
-      addToSchedule({
-        disciplineCode: currentCode,
-        disciplineName: currentName,
-        classCode: section.section_code,
-        professor: section.professor,
-        schedule: timeCodes || 'Horário a definir',
-        color: '',
-        day: 'Seg',
-        startTime: '08:00',
-        endTime: '10:00'
-      });
-
-      toast({
-        title: "Turma adicionada!",
-        description: `${currentName} (${section.section_code}) foi adicionada. Horário não disponível.`,
-        variant: "default"
-      });
-    }
+    const isAlreadyAdded = mySections.some((s) => s.id_ref === section.id_ref);
+    toggleSection(section);
+    toast({
+      title: isAlreadyAdded ? 'Turma removida' : 'Turma adicionada!',
+      description: `${currentName} (${(section as any).section_code || section.id_ref}) ${isAlreadyAdded ? 'removida da' : 'foi adicionada à'} sua lista.`,
+      variant: isAlreadyAdded ? 'default' : 'default',
+    });
   };
 
   const isCompleted = completedDisciplines.includes(currentCode);
@@ -294,124 +246,15 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                   <p className="text-muted-foreground text-sm">Nenhuma turma disponível para esta disciplina no momento.</p>
                 ) : (
                   <div className="space-y-3">
-                    {sections.map((section, idx) => {
-                      const seatsCount = (section as any)?.seats_count ?? (section.slots ?? 0);
-                      const seatsAccepted = (section as any)?.seats_accepted ?? (section.enrolled ?? 0);
-                      const available = seatsCount - seatsAccepted;
-                      const isFull = available <= 0;
-                      const isAlmostFull = available > 0 && available <= 5;
-                      const isAdded = scheduledItems.some(
-                        (item) => item.disciplineCode === currentCode && item.classCode === section.section_code,
-                      );
-
+                    {sections.map((section) => {
+                      const isAdded = mySections.some((s) => s.id_ref === section.id_ref);
                       return (
-                        <div
-                          key={`${section.course_code || currentCode}-${section.section_code || idx}`}
-                          className={cn(
-                            'p-4 rounded-xl border-2 transition-all',
-                            isFull
-                              ? 'border-destructive/50 bg-destructive/5'
-                              : isAlmostFull
-                              ? 'border-warning/50 bg-warning/5'
-                              : isAdded
-                              ? 'border-success/50 bg-success/5'
-                              : 'border-border bg-muted/50',
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="font-semibold text-card-foreground text-sm">
-                                  {(() => {
-                                    const teachers = Array.isArray((section as any)?.teachers)
-                                      ? (section as any).teachers
-                                      : undefined;
-                                    if (teachers && teachers.length > 0) return teachers[0];
-                                    return section.professor || `Turma ${section.section_code}`;
-                                  })()}
-                                </span>
-                                {isFull && (
-                                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-destructive text-destructive-foreground">Lotada</span>
-                                )}
-                                {isAdded && (
-                                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-success text-success-foreground">Adicionada</span>
-                                )}
-                              </div>
-
-                              {(() => {
-                                const teachers = Array.isArray((section as any)?.teachers)
-                                  ? (section as any).teachers
-                                  : undefined;
-                                if (teachers && teachers.length > 1) {
-                                  const extra = teachers.length - 1;
-                                  return (
-                                    <div className="mb-2">
-                                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                        <Users className="w-4 h-4" />
-                                        <span className="truncate block">+ {extra} professor{extra > 1 ? 'es' : ''}</span>
-                                      </div>
-                                    </div>
-                                  );
-                                }
-                                if (!teachers || teachers.length === 0) {
-                                  return (
-                                    <div className="mb-2">
-                                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                        <Users className="w-4 h-4" />
-                                        <span className="truncate block">Professor(es) a definir</span>
-                                      </div>
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              })()}
-
-                              <div className="mt-2 pt-2 border-t border-border">
-                                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                  <div className="flex items-center gap-1">
-                                    <Clock className="w-4 h-4" />
-                                    <span>
-                                      {section.schedule_raw ||
-                                        (Array.isArray((section as any)?.time_codes) && (section as any).time_codes.length > 0
-                                          ? (section as any).time_codes.join(', ')
-                                          : 'Horário a definir')}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                                  <div className="flex items-center gap-1">
-                                    <Users className="w-4 h-4" />
-                                    <span>
-                                      {seatsAccepted}/{seatsCount}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            <button
-                              onClick={() => handleAddClass(section)}
-                              disabled={isFull || isAdded}
-                              className={cn(
-                                'flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all',
-                                isFull || isAdded
-                                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                                  : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25',
-                              )}
-                            >
-                              <Plus className="w-4 h-4" />
-                              <span className="hidden sm:inline">Adicionar</span>
-                            </button>
-                            </div>
-
-                          {isAlmostFull && !isFull && (
-                            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-warning/30 text-warning text-sm">
-                              <AlertCircle className="w-4 h-4" />
-                              <span>Poucas vagas restantes ({available})</span>
-                            </div>
-                          )}
-                        </div>
+                        <SectionCard
+                          key={section.id_ref}
+                          section={section}
+                          isAdded={isAdded}
+                          onAdd={() => handleAddClass(section)}
+                        />
                       );
                     })}
                   </div>

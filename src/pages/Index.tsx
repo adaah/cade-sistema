@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
+import { useMySections } from '@/hooks/useMySections';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { ScheduleGrid } from '@/components/planner/ScheduleGrid';
@@ -10,16 +11,18 @@ import { Calendar, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Index = () => {
-  const { scheduledItems, completedDisciplines } = useApp();
+  const { completedDisciplines } = useApp();
+  const { mySections } = useMySections();
   const { myPrograms } = useMyPrograms();
   const isMobile = useIsMobile();
 
 
   // Get unique scheduled disciplines
   const scheduledCount = useMemo(() => {
-    const unique = new Set(scheduledItems.map(item => item.disciplineCode));
+    const unique = new Set(mySections.map(s => (s as any)?.course?.code || (s as any)?.course_code));
+    unique.delete(undefined as unknown as string);
     return unique.size;
-  }, [scheduledItems]);
+  }, [mySections]);
 
   // Calculate total workload
   const totalWorkload = 0
@@ -76,7 +79,7 @@ const Index = () => {
         </div>
 
         {/* Schedule View */}
-        {scheduledItems.length === 0 ? (
+        {mySections.length === 0 ? (
           <div className="bg-card rounded-xl border border-border p-12 text-center">
             <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
             <h2 className="text-lg font-semibold text-card-foreground mb-2">
