@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, AlertCircle } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { reduce, append } from 'ramda'
@@ -7,7 +7,7 @@ import { DisciplineCard } from '@/components/disciplines/DisciplineCard';
 import { DisciplineDetail } from '@/components/disciplines/DisciplineDetail';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { useApp } from '@/contexts/AppContext';
-import { useSections } from '@/hooks/useApi';
+import { useCourses as useAllCourses, useSections } from '@/hooks/useApi';
 import { useMyCourses } from '@/hooks/useMyCourses';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
 import {Course, CourseApi} from '@/services/api';
@@ -57,7 +57,7 @@ const Disciplinas = () => {
   // Sections são carregadas internamente pelo DisciplineDetail
 
   // Type group (exclusive): all | obrigatoria | optativa
-  const [typeFilter, setTypeFilter] = useState<'all' | 'obrigatoria' | 'optativa'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'obrigatoria' | 'optativa' | 'geral'>('all');
 
   // Multi-select filters (AND). Exclude type-related ones from this list.
   const filters = [
@@ -81,6 +81,15 @@ const Disciplinas = () => {
 
   // Order select state: 'name' (default) | 'sections'
   const [orderBy, setOrderBy] = useState<'name' | 'sections'>('name');
+  // Catálogo global da universidade
+  const { data: allCourses = [] } = useAllCourses();
+  const [globalLimit, setGlobalLimit] = useState(60);
+  useEffect(() => {
+    if (typeFilter === 'geral') {
+      setGlobalLimit(60);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, orderBy, activeIds, typeFilter]);
   
   
 
@@ -153,6 +162,7 @@ const Disciplinas = () => {
                 { id: 'all', label: 'Todos' },
                 { id: 'obrigatoria', label: 'Obrigatórias' },
                 { id: 'optativa', label: 'Optativas' },
+                { id: 'geral', label: 'Global' },
               ] as const).map((b, idx) => (
                 <button
                   key={b.id}
@@ -161,7 +171,7 @@ const Disciplinas = () => {
                   className={cn(
                     'px-2.5 py-1.5 border border-border -ml-px first:ml-0',
                     idx === 0 ? 'rounded-l-xl' : '',
-                    idx === 2 ? 'rounded-r-xl' : '',
+                    idx === 3 ? 'rounded-r-xl' : '',
                     typeFilter === b.id
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:bg-accent'
@@ -215,6 +225,71 @@ const Disciplinas = () => {
             {[...Array(6)].map((_, i) => (
               <SkeletonCard key={i} />
             ))}
+          </div>
+        ) : typeFilter === 'geral' ? (
+          <div className="space-y-6">
+            <motion.div
+              key="catalogo-geral"
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 16 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className="bg-card rounded-xl border border-border p-4"
+            >
+              <h3 className="font-semibold text-card-foreground mb-4 pb-2 border-b border-border">
+                Catálogo Global
+              </h3>
+              {(() => {
+                const searched = fuzzyFilter<CourseApi>(allCourses, search, ['name', 'code']);
+                let filtered = apply(searched);
+                // Ordenação
+                filtered = [...filtered].sort((a, b) => {
+                  if (orderBy === 'sections') {
+                    const diff = (b.sections_count ?? 0) - (a.sections_count ?? 0);
+                    if (diff !== 0) return diff;
+                    return a.name.localeCompare(b.name);
+                  }
+                  return a.name.localeCompare(b.name);
+                });
+                const total = filtered.length;
+                const items = filtered.slice(0, globalLimit);
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <AnimatePresence mode="popLayout">
+                      {items.map((course) => (
+                        <motion.div
+                          key={course.code}
+                          layout
+                          layoutId={`course-${course.code}`}
+                          initial={{ opacity: 0, scale: 0.98 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.98 }}
+                          transition={{ duration: 0.35, ease: 'easeOut' }}
+                        >
+                          <DisciplineCard
+                            discipline={course}
+                            available={true}
+                            blocked={false}
+                            onClick={() => setSelectedDiscipline(course)}
+                          />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                    {globalLimit < total && (
+                      <div className="col-span-2 md:col-span-3 flex justify-center mt-2">
+                        <Button
+                          variant="secondary"
+                          className="rounded-xl"
+                          onClick={() => setGlobalLimit((v) => Math.min(v + 60, total))}
+                        >
+                          Mostrar mais ({Math.max(0, total - globalLimit)})
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </motion.div>
           </div>
         ) : courses.length > 0 ? (
           <div className="space-y-6">
