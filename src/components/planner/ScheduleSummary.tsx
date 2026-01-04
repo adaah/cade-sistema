@@ -1,106 +1,23 @@
-import { Clock, BookOpen, Trash2 } from 'lucide-react';
-import { useCourses } from '@/hooks/useApi';
-import {useMyCourses} from "@/hooks/useMyCourses.ts";
+import { Calendar, Users, Trash2, Clock, Info } from 'lucide-react';
+import { useState } from 'react';
 import { useMySections } from '@/hooks/useMySections';
-import { parseSigaaSchedule } from '@/services/api';
-
-type ScheduledItem = {
-  disciplineCode: string;
-  disciplineName: string;
-  classCode: string;
-  professor: string;
-  schedule: string;
-  color: string;
-  day: string;
-  startTime: string;
-  endTime: string;
-};
-
-const COLORS = [
-  'hsl(217, 91%, 60%)',
-  'hsl(142, 71%, 45%)',
-  'hsl(280, 65%, 60%)',
-  'hsl(0, 72%, 51%)',
-  'hsl(38, 92%, 50%)',
-  'hsl(180, 65%, 45%)',
-  'hsl(320, 65%, 52%)',
-  'hsl(45, 93%, 47%)',
-];
-
-function colorFor(code: string) {
-  let hash = 0;
-  for (let i = 0; i < code.length; i++) hash = ((hash << 5) - hash) + code.charCodeAt(i);
-  const idx = Math.abs(hash) % COLORS.length;
-  return COLORS[idx];
-}
+import { useMyCourses } from '@/hooks/useMyCourses.ts';
+import { DisciplineDetail } from '@/components/disciplines/DisciplineDetail';
+import type { Course } from '@/services/api';
+import { Progress } from '@/components/ui/progress';
 
 export function ScheduleSummary() {
   const { mySections, toggleSection } = useMySections();
   const { courses } = useMyCourses();
+  const [selectedDiscipline, setSelectedDiscipline] = useState<Course | null>(null);
 
-  // Build items from mySections
-  const scheduledItems: ScheduledItem[] = [];
-  for (const s of mySections) {
-    const disciplineCode = (s as any)?.course?.code || (s as any)?.course_code || '';
-    const disciplineName = (s as any)?.course?.name || disciplineCode;
-    const classCode = (s as any)?.section_code || s.id_ref;
-    const professor = (s as any)?.professor || '';
-    const raw = (s as any)?.schedule_raw || (Array.isArray((s as any)?.time_codes) ? (s as any).time_codes.join(' ') : '');
-    const parsed = raw ? parseSigaaSchedule(raw) : [];
-    if (parsed.length > 0) {
-      for (const sched of parsed) {
-        scheduledItems.push({
-          disciplineCode,
-          disciplineName,
-          classCode,
-          professor,
-          schedule: raw,
-          color: colorFor(disciplineCode),
-          day: sched.day,
-          startTime: sched.start_time,
-          endTime: sched.end_time,
-        });
-      }
-    } else {
-      scheduledItems.push({
-        disciplineCode,
-        disciplineName,
-        classCode,
-        professor,
-        schedule: raw || 'Horário a definir',
-        color: colorFor(disciplineCode),
-        day: 'Seg',
-        startTime: '08:00',
-        endTime: '10:00',
-      });
-    }
-  }
-
-  const uniqueDisciplines = scheduledItems.reduce((acc, item) => {
-    const key = `${item.disciplineCode}-${item.classCode}`;
-    if (!acc.find(d => `${d.disciplineCode}-${d.classCode}` === key)) {
-      acc.push(item);
-    }
-    return acc;
-  }, [] as ScheduledItem[]);
-
-  const totalCredits = uniqueDisciplines.reduce((sum, item) => {
-    const discipline = courses?.find(d => d.code === item.disciplineCode);
-    return sum + (discipline?.credits || 0);
-  }, 0);
-
-  const totalWorkload = uniqueDisciplines.reduce((sum, item) => {
-    const discipline = courses?.find(d => d.code === item.disciplineCode);
-    return sum + (discipline?.workload || 0);
-  }, 0);
-
-  if (uniqueDisciplines.length === 0) {
+  if (mySections.length === 0) {
     return (
       <div className="bg-card rounded-xl border border-border p-6 text-center">
         <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
-          <BookOpen className="w-6 h-6 text-muted-foreground" />
+          <Calendar className="w-6 h-6 text-muted-foreground" />
         </div>
-        <h3 className="font-semibold text-card-foreground mb-1">Grade Vazia</h3>
+        <h3 className="font-semibold text-card-foreground mb-1">Nenhuma turma adicionada</h3>
         <p className="text-sm text-muted-foreground">
           Adicione turmas pelo catálogo de disciplinas
         </p>
@@ -111,8 +28,7 @@ export function ScheduleSummary() {
   return (
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-card-foreground">Minha Grade</h3>
-        {/* Clear all: toggle off every section */}
+        <h3 className="font-semibold text-card-foreground">Minhas Turmas</h3>
         <button
           onClick={() => mySections.forEach((s) => toggleSection(s))}
           className="text-sm text-destructive hover:text-destructive/80 transition-colors"
@@ -121,57 +37,76 @@ export function ScheduleSummary() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-muted rounded-lg p-3">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <Clock className="w-4 h-4" />
-            <span className="text-xs">Carga Horária</span>
-          </div>
-          <p className="text-xl font-bold text-card-foreground">{totalWorkload}h</p>
-        </div>
-        <div className="bg-muted rounded-lg p-3">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <BookOpen className="w-4 h-4" />
-            <span className="text-xs">Créditos</span>
-          </div>
-          <p className="text-xl font-bold text-card-foreground">{totalCredits}</p>
-        </div>
-      </div>
+      <div className="space-y-3">
+        {mySections.map((s) => {
+          const disciplineCode = s.course?.code || (s as any)?.course_code || '';
+          const disciplineName = s.course?.name || disciplineCode;
+          const classCode = (s as any)?.section_code || s.id_ref;
+          const teachers = Array.isArray((s as any)?.teachers) ? (s as any).teachers : ((s as any)?.professor ? [(s as any).professor] : []);
+          const timeCodes = Array.isArray(s.time_codes) ? s.time_codes : [];
+          const course = courses?.find(c => c.code === disciplineCode);
+          const alternatives = Math.max(0, ((course?.sections_count ?? 1) - 1));
+          const seatsAccepted = (s as any)?.seats_accepted ?? 0;
+          const seatsCount = (s as any)?.seats_count ?? 0;
+          const progress = seatsCount > 0 ? Math.min(100, Math.max(0, Math.round((seatsAccepted / seatsCount) * 100))) : 0;
 
-      <div className="space-y-2">
-        {uniqueDisciplines.map((item) => (
-          <div
-            key={`${item.disciplineCode}-${item.classCode}`}
-            className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
-          >
-            <div
-              className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ backgroundColor: item.color || '#3b82f6' }}
-            />
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-card-foreground text-sm truncate">
-                {item.disciplineName}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {item.classCode} • {item.professor}
-              </p>
+          return (
+            <div key={`${disciplineCode}-${classCode}`} className="p-3 rounded-lg border border-border bg-muted/40">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-primary">{disciplineCode}</span>
+                    {alternatives > 0 && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-accent text-accent-foreground border border-border whitespace-nowrap">
+                        + {alternatives} alternativa{alternatives > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-medium text-card-foreground truncate">{disciplineName}</p>
+
+                  <div className="mt-1 space-y-1">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Users className="w-3 h-3" />
+                      <span className="truncate">{teachers.length > 0 ? teachers.join(', ') : 'Professor(es) a definir'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock className="w-3 h-3" />
+                      <span className="truncate">{timeCodes.length > 0 ? timeCodes.join(', ') : 'Horário a definir'}</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleSection(s)}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => { if (course) setSelectedDiscipline(course as Course); }}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:bg-accent transition-all"
+                  aria-label="Mais informações"
+                >
+                  <Info className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                  <span>Vagas preenchidas</span>
+                  <span>{seatsAccepted}/{seatsCount}</span>
+                </div>
+                <Progress value={progress} />
+              </div>
             </div>
-            <button
-              onClick={() => {
-                const toRemove = mySections.find((s) => {
-                  const dc = (s as any)?.course?.code || (s as any)?.course_code;
-                  const cc = (s as any)?.section_code || s.id_ref;
-                  return dc === item.disciplineCode && cc === item.classCode;
-                });
-                if (toRemove) toggleSection(toRemove);
-              }}
-              className="p-1.5 rounded-lg text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
+      {selectedDiscipline && (
+        <DisciplineDetail
+          discipline={selectedDiscipline}
+          onClose={() => setSelectedDiscipline(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,18 +1,18 @@
 import { useMySections } from '@/hooks/useMySections';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
-import { parseSigaaSchedule } from '@/services/api';
+import { getSpplitedCode } from '@/lib/schedule';
 
 const days = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const hours = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
 
 const dayMap: Record<string, string> = {
-  'Seg': 'Seg',
-  'Ter': 'Ter',
-  'Qua': 'Qua',
-  'Qui': 'Qui',
-  'Sex': 'Sex',
-  'Sáb': 'Sáb'
+  '2': 'Seg',
+  '3': 'Ter',
+  '4': 'Qua',
+  '5': 'Qui',
+  '6': 'Sex',
+  '7': 'Sáb',
 };
 
 type ScheduledItem = {
@@ -20,11 +20,10 @@ type ScheduledItem = {
   disciplineName: string;
   classCode: string;
   professor: string;
-  schedule: string;
   color: string;
-  day: string;
-  startTime: string;
-  endTime: string;
+  day: string; // 'Seg' | 'Ter' | ...
+  startTime: string; // 'HH:MM'
+  endTime: string;   // 'HH:MM'
 };
 
 const COLORS = [
@@ -53,35 +52,32 @@ export function ScheduleGrid() {
     const disciplineCode = (s as any)?.course?.code || (s as any)?.course_code || '';
     const disciplineName = (s as any)?.course?.name || disciplineCode;
     const classCode = (s as any)?.section_code || s.id_ref;
-    const professor = (s as any)?.professor || '';
-    const raw = (s as any)?.schedule_raw || (Array.isArray((s as any)?.time_codes) ? (s as any).time_codes.join(' ') : '');
-    const parsed = raw ? parseSigaaSchedule(raw) : [];
-    if (parsed.length > 0) {
-      for (const sched of parsed) {
-        scheduledItems.push({
-          disciplineCode,
-          disciplineName,
-          classCode,
-          professor,
-          schedule: raw,
-          color: colorFor(disciplineCode),
-          day: sched.day,
-          startTime: sched.start_time,
-          endTime: sched.end_time,
-        });
-      }
-    } else {
-      // Fallback placeholder
+    const professor = Array.isArray((s as any)?.teachers) && (s as any).teachers.length > 0
+      ? (s as any).teachers.join(', ')
+      : ((s as any)?.professor || '');
+
+    const codes = Array.isArray(s.time_codes) ? s.time_codes : [];
+    const discreteCodes = codes.flatMap((c) => getSpplitedCode(c));
+
+    for (const code of discreteCodes) {
+      const match = code.match(/^([2-7])([MTN])([1-6])$/i);
+      if (!match) continue;
+      const [, dayNum, shift, slotStr] = match;
+      const day = dayMap[dayNum];
+      const base = shift === 'M' ? 7 : shift === 'T' ? 13 : 18;
+      const slot = parseInt(slotStr, 10);
+      const startHour = base + (slot - 1);
+      const endHour = startHour + 1;
+
       scheduledItems.push({
         disciplineCode,
         disciplineName,
         classCode,
         professor,
-        schedule: raw || 'Horário a definir',
         color: colorFor(disciplineCode),
-        day: 'Seg',
-        startTime: '08:00',
-        endTime: '10:00',
+        day,
+        startTime: `${startHour.toString().padStart(2, '0')}:00`,
+        endTime: `${endHour.toString().padStart(2, '0')}:00`,
       });
     }
   }
@@ -97,8 +93,7 @@ export function ScheduleGrid() {
 
   const getItemsForSlot = (day: string, hour: string) => {
     return scheduledItems.filter(item => {
-      const itemDay = dayMap[item.day] || item.day;
-      if (itemDay !== day) return false;
+      if (item.day !== day) return false;
 
       const slotHour = parseInt(hour.split(':')[0]);
       const startHour = parseInt(item.startTime.split(':')[0]);

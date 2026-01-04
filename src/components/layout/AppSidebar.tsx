@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 const menuItems = [
   { title: 'Início', url: '/', icon: Home, disabled: true },
   { title: 'Disciplinas', url: '/disciplinas', icon: BookOpen },
-  { title: 'Planejador', url: '/planejador', icon: Calendar, disabled: true },
+  { title: 'Planejador', url: '/planejador', icon: Calendar },
   { title: 'Configurações', url: '/configuracoes', icon: Settings },
 ];
 
