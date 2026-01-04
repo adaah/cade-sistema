@@ -1,8 +1,11 @@
-import { AlertCircle, Clock, Plus, Users, Eraser, ArrowLeftRight } from 'lucide-react';
+import { AlertCircle, Clock, Plus, Users, Eraser, ArrowLeftRight, BadgeInfo, AlertTriangle, Star, Flame } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Section } from '@/services/api';
 import { useMySections } from '@/hooks/useMySections';
 import { useApp } from '@/contexts/AppContext';
+import { getCompetitionLevel, getPhase1Level, getPhase2Level } from '@/lib/competition';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useMyPrograms } from '@/hooks/useMyPrograms';
 
 interface SectionCardProps {
   section: Section;
@@ -19,6 +22,17 @@ export function SectionCard({ section, isAdded, onAdd, onNavigateCourse }: Secti
   const available = seatsCount - seatsAccepted;
   const isFull = available <= 0;
   const isAlmostFull = available > 0 && available <= 5;
+  const seatsRequested = (section as any)?.seats_requested ?? 0;
+  const seatsRerequested = (section as any)?.seats_rerequested ?? 0;
+  const competition = getCompetitionLevel(seatsCount, seatsRequested, seatsRerequested);
+  const compPhase1 = getPhase1Level(seatsCount, seatsRequested);
+  const compPhase2 = getPhase2Level(seatsCount, seatsAccepted, seatsRerequested);
+  const { myPrograms } = useMyPrograms();
+  const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
+  const hasExclusive = Array.isArray(section.spots_reserved) && section.spots_reserved.some(r => {
+    const t = ((r as any)?.program?.title || '').trim().toLowerCase();
+    return t && myProgramTitles.has(t);
+  });
 
   const teachers = section.teachers ?? []
 
@@ -49,7 +63,7 @@ export function SectionCard({ section, isAdded, onAdd, onNavigateCourse }: Secti
           </div>
 
           {/* Tags always below the title (no 'Adicionar' tag) */}
-          <div className="mb-2">
+          <div className="mb-2 flex flex-wrap gap-1 items-center">
             {isFull && (
               <span className="px-2 py-0.5 rounded text-xs font-medium bg-destructive text-destructive-foreground">
                 Lotada
@@ -60,11 +74,82 @@ export function SectionCard({ section, isAdded, onAdd, onNavigateCourse }: Secti
                 Adicionada
               </span>
             )}
+            {/* Conflito */}
             {!isFull && conflicts.length > 0 && (
-              <span className="px-2 py-0.5 rounded text-xs font-medium bg-warning text-warning-foreground">
-                Conflito
-              </span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground inline-flex items-center gap-1 cursor-default">
+                      <AlertTriangle className="w-3 h-3" /> Conflito
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div>Há choque de horário com outra turma selecionada.</div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
+            {/* Poucas Vagas */}
+            {!isFull && isAlmostFull && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 cursor-default bg-indigo-600 text-white">
+                      <Flame className="w-3 h-3" /> Poucas Vagas
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div>Restam poucas vagas disponíveis nesta turma.</div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {/* Exclusiva */}
+            {hasExclusive && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-primary text-primary-foreground inline-flex items-center gap-1 cursor-default">
+                      <Star className="w-3 h-3" /> Exclusiva ({Math.max(0, seatsCount - seatsAccepted)})
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div>Vagas reservadas ao(s) seu(s) programa(s) selecionado(s).</div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {/* Tags por fase com tooltip */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={cn("px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 cursor-default", compPhase1.colorClass)}>
+                    <BadgeInfo className="w-3 h-3" /> Etapa 1: {compPhase1.label} ({seatsRequested})
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div>
+                    <div>Solicitações (Etapa 1): {seatsRequested}</div>
+                    <div>Vagas Totais: {seatsCount}</div>
+                    <div>Razão: {compPhase1.ratio.toFixed(2)}</div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={cn("px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 cursor-default", compPhase2.colorClass)}>
+                    <BadgeInfo className="w-3 h-3" /> Etapa 2: {compPhase2.label} ({seatsRerequested})
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div>
+                    <div>Solicitações (Etapa 2): {seatsRerequested}</div>
+                    <div>Vagas Remanescentes: {Math.max(0, seatsCount - seatsAccepted)}</div>
+                    <div>Razão: {compPhase2.ratio.toFixed(2)}</div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
 
           {(() => {
@@ -110,6 +195,14 @@ export function SectionCard({ section, isAdded, onAdd, onNavigateCourse }: Secti
                 <span>
                   {seatsAccepted}/{seatsCount}
                 </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs">Etapa 1:</span>
+                <span className="text-xs font-medium">{seatsRequested}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs">Etapa 2:</span>
+                <span className="text-xs font-medium">{seatsRerequested}</span>
               </div>
             </div>
 
@@ -196,12 +289,7 @@ export function SectionCard({ section, isAdded, onAdd, onNavigateCourse }: Secti
         })()}
       </div>
 
-      {isAlmostFull && !isFull && (
-        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-warning/30 text-warning text-sm">
-          <AlertCircle className="w-4 h-4" />
-          <span>Poucas vagas restantes ({available})</span>
-        </div>
-      )}
+      {false}
     </div>
   );
 }

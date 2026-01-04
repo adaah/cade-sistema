@@ -1,15 +1,20 @@
-import { Calendar, Users, Trash2, Clock, Info } from 'lucide-react';
+import { Calendar, Users, Trash2, Clock, Info, BadgeInfo, AlertTriangle, AlertCircle, Star, Flame } from 'lucide-react';
 import { useState } from 'react';
 import { useMySections } from '@/hooks/useMySections';
 import { useMyCourses } from '@/hooks/useMyCourses.ts';
 import { DisciplineDetail } from '@/components/disciplines/DisciplineDetail';
 import type { Course } from '@/services/api';
 import { Progress } from '@/components/ui/progress';
+import { getCompetitionLevel, getPhase1Level, getPhase2Level } from '@/lib/competition';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useMyPrograms } from '@/hooks/useMyPrograms';
 
 export function ScheduleSummary() {
-  const { mySections, toggleSection } = useMySections();
+  const { mySections, toggleSection, getConflictsForSection } = useMySections();
   const { courses } = useMyCourses();
   const [selectedDiscipline, setSelectedDiscipline] = useState<Course | null>(null);
+  const { myPrograms } = useMyPrograms();
+  const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
 
   if (mySections.length === 0) {
     return (
@@ -49,6 +54,18 @@ export function ScheduleSummary() {
           const seatsAccepted = (s as any)?.seats_accepted ?? 0;
           const seatsCount = (s as any)?.seats_count ?? 0;
           const progress = seatsCount > 0 ? Math.min(100, Math.max(0, Math.round((seatsAccepted / seatsCount) * 100))) : 0;
+          const seatsRequested = (s as any)?.seats_requested ?? 0;
+          const seatsRerequested = (s as any)?.seats_rerequested ?? 0;
+          const competition = getCompetitionLevel(seatsCount, seatsRequested, seatsRerequested);
+          const compPhase1 = getPhase1Level(seatsCount, seatsRequested);
+          const compPhase2 = getPhase2Level(seatsCount, seatsAccepted, seatsRerequested);
+          const available = Math.max(0, seatsCount - seatsAccepted);
+          const isAlmostFull = available > 0 && available <= 5;
+          const conflicts = getConflictsForSection(s);
+          const hasExclusive = Array.isArray((s as any)?.spots_reserved) && ((s as any).spots_reserved as any[]).some(r => {
+            const t = ((r as any)?.program?.title || '').trim().toLowerCase();
+            return t && myProgramTitles.has(t);
+          });
 
           return (
             <div key={`${disciplineCode}-${classCode}`} className="p-3 rounded-lg border border-border bg-muted/40">
@@ -56,11 +73,6 @@ export function ScheduleSummary() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-primary">{disciplineCode}</span>
-                    {alternatives > 0 && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-accent text-accent-foreground border border-border whitespace-nowrap">
-                        + {alternatives} alternativa{alternatives > 1 ? 's' : ''}
-                      </span>
-                    )}
                   </div>
                   <p className="font-medium text-card-foreground truncate">{disciplineName}</p>
 
@@ -96,6 +108,90 @@ export function ScheduleSummary() {
                   <span>{seatsAccepted}/{seatsCount}</span>
                 </div>
                 <Progress value={progress} />
+                <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                  <span>Etapa 1: <span className="font-medium text-foreground">{seatsRequested}</span></span>
+                  <span>Etapa 2: <span className="font-medium text-foreground">{seatsRerequested}</span></span>
+                </div>
+                {/* Tags moved to bottom, allow wrap */}
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {alternatives > 0 && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-accent text-accent-foreground border border-border whitespace-nowrap">
+                      + {alternatives} alternativa{alternatives > 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {conflicts.length > 0 && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-secondary text-secondary-foreground inline-flex items-center gap-1 cursor-default">
+                            <AlertTriangle className="w-3 h-3" /> Conflito
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div>Há choque de horário com outra turma selecionada.</div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  {isAlmostFull && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium inline-flex items-center gap-1 cursor-default bg-indigo-600 text-white">
+                            <Flame className="w-3 h-3" /> Poucas Vagas
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div>Restam poucas vagas disponíveis nesta turma.</div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  {hasExclusive && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-primary text-primary-foreground inline-flex items-center gap-1 cursor-default">
+                            <Star className="w-3 h-3" /> Exclusiva ({available})
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div>Vagas reservadas ao(s) seu(s) programa(s) selecionado(s).</div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap inline-flex items-center gap-1 ${compPhase1.colorClass}`}>
+                          <BadgeInfo className="w-3 h-3" /> Etapa 1: {compPhase1.label} ({seatsRequested})
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div>
+                          <div>Solicitações (Etapa 1): {seatsRequested}</div>
+                          <div>Vagas Totais: {seatsCount}</div>
+                          <div>Razão: {compPhase1.ratio.toFixed(2)}</div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap inline-flex items-center gap-1 ${compPhase2.colorClass}`}>
+                          <BadgeInfo className="w-3 h-3" /> Etapa 2: {compPhase2.label} ({seatsRerequested})
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div>
+                          <div>Solicitações (Etapa 2): {seatsRerequested}</div>
+                          <div>Vagas Remanescentes: {Math.max(0, seatsCount - seatsAccepted)}</div>
+                          <div>Razão: {compPhase2.ratio.toFixed(2)}</div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               </div>
             </div>
           );
