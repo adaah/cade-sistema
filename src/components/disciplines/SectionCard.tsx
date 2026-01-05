@@ -1,4 +1,4 @@
-import { AlertCircle, Clock, Plus, Users, Eraser, ArrowLeftRight, BadgeInfo, AlertTriangle, Star, Flame } from 'lucide-react';
+import { AlertCircle, Clock, Plus, Users, Eraser, ArrowLeftRight, BadgeInfo, AlertTriangle, Star, Flame, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Section } from '@/services/api';
 import { useMySections } from '@/hooks/useMySections';
@@ -6,6 +6,8 @@ import { useApp } from '@/contexts/AppContext';
 import { getCompetitionLevel, getPhase1Level, getPhase2Level } from '@/lib/competition';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
+import { Progress } from '@/components/ui/progress';
+import { getReservedUnfilledBonus, getReservedUnfilledForTitles } from '@/lib/utils';
 
 interface SectionCardProps {
   section: Section;
@@ -33,6 +35,7 @@ export function SectionCard({ section, isAdded, onAdd, onNavigateCourse }: Secti
     const t = ((r as any)?.program?.title || '').trim().toLowerCase();
     return t && myProgramTitles.has(t);
   });
+  const reservedRemaining = getReservedUnfilledForTitles(section, myProgramTitles);
 
   const teachers = section.teachers ?? []
 
@@ -104,13 +107,13 @@ export function SectionCard({ section, isAdded, onAdd, onNavigateCourse }: Secti
                 </Tooltip>
               </TooltipProvider>
             )}
-            {/* Exclusiva */}
-            {hasExclusive && (
+            {/* Reservado */}
+            {hasExclusive && reservedRemaining > 0 && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="px-2 py-0.5 rounded text-xs font-medium bg-primary text-primary-foreground inline-flex items-center gap-1 cursor-default">
-                      <Star className="w-3 h-3" /> Exclusiva ({Math.max(0, seatsCount - seatsAccepted)})
+                      <Star className="w-3 h-3" /> Reservado ({reservedRemaining})
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -119,6 +122,17 @@ export function SectionCard({ section, isAdded, onAdd, onNavigateCourse }: Secti
                 </Tooltip>
               </TooltipProvider>
             )}
+            {/* Bônus Lixão oculto temporariamente
+            {(() => {
+              const bonus = getReservedUnfilledBonus(section);
+              if (bonus <= 0) return null;
+              return (
+                <span className="px-2 py-0.5 rounded text-xs font-medium bg-accent text-accent-foreground border border-border inline-flex items-center gap-1 cursor-default">
+                  <Trash2 className="w-3 h-3" /> Bônus Lixão ({bonus})
+                </span>
+              );
+            })()}
+            */}
             {/* Tags por fase com tooltip */}
             <TooltipProvider>
               <Tooltip>
@@ -189,21 +203,12 @@ export function SectionCard({ section, isAdded, onAdd, onNavigateCourse }: Secti
               </div>
             </div>
 
-            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-              <div className="flex items-center gap-1">
-                <Users className="w-4 h-4" />
-                <span>
-                  {seatsAccepted}/{seatsCount}
-                </span>
+            <div className="mt-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                <span>Vagas preenchidas</span>
+                <span>{seatsAccepted}/{seatsCount}</span>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="text-xs">Etapa 1:</span>
-                <span className="text-xs font-medium">{seatsRequested}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-xs">Etapa 2:</span>
-                <span className="text-xs font-medium">{seatsRerequested}</span>
-              </div>
+              <Progress value={seatsCount > 0 ? Math.min(100, Math.max(0, Math.round((seatsAccepted / seatsCount) * 100))) : 0} />
             </div>
 
             {(() => {
@@ -279,8 +284,12 @@ export function SectionCard({ section, isAdded, onAdd, onNavigateCourse }: Secti
                       : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25',
                 )}
               >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">{conflicts.length > 0 ? 'Sobrescrever' : 'Adicionar'}</span>
+                {conflicts.length > 0 ? (
+                  <ArrowLeftRight className="w-4 h-4" />
+                ) : (
+                  <Plus className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">{conflicts.length > 0 ? 'Trocar' : 'Adicionar'}</span>
               </button>
             );
           })()}

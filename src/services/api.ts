@@ -74,11 +74,11 @@ export interface ProgramDetail {
 
 export interface Section {
   course: {
-    code: string
-    name: string
+    code: string;
+    name: string;
   };
   id_ref: string;
-  location_table: string
+  location_table: string;
   mode: string;
   seats_accepted: number;
   seats_count: number;
@@ -87,12 +87,19 @@ export interface Section {
   spots_reserved: Array<{
     program: {
       title: string;
-      seats_accepted: number;
-      seats_count: number;
-    }
-  }>
-  teachers: string[]
-  time_codes: string[]
+      location?: string;
+      program_type?: string;
+      mode?: string;
+      time_code?: string;
+      id_ref?: string;
+      code?: string;
+      detail_url?: string;
+    };
+    seats_accepted: number;
+    seats_count: number;
+  }>;
+  teachers: string[];
+  time_codes: string[];
 }
 
 export type Course = CourseApi;

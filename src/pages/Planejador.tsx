@@ -8,9 +8,9 @@ import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useApp } from '@/contexts/AppContext';
 import { Course, Section } from '@/services/api';
-import { Clock, Users, Plus, BadgeInfo, AlertTriangle, AlertCircle, Star, Flame } from 'lucide-react';
+import { Clock, Users, Plus, BadgeInfo, AlertTriangle, AlertCircle, Star, Flame, Trash2 } from 'lucide-react';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
-import { cn } from '@/lib/utils';
+import { cn, getReservedUnfilledBonus, getReservedUnfilledForTitles } from '@/lib/utils';
 import {useMyCourses} from "@/hooks/useMyCourses.ts";
 import { fuzzyFilter } from '@/lib/fuzzy';
 import { useFavoriteCourses } from '@/hooks/useFavoriteCourses';
@@ -175,10 +175,7 @@ const Planejador = () => {
                               <span>{seatsAccepted}/{seatsCount}</span>
                             </div>
                             <Progress value={progress} />
-                            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                              <span>Etapa 1: <span className="font-medium text-foreground">{seatsRequested}</span></span>
-                              <span>Etapa 2: <span className="font-medium text-foreground">{seatsRerequested}</span></span>
-                            </div>
+                            
                             {/* Tags moved to bottom, allow wrap */}
                             <div className="flex flex-wrap gap-1 mt-2">
                               {alternatives > 0 && (
@@ -194,6 +191,8 @@ const Planejador = () => {
                                   const t = ((r as any)?.program?.title || '').trim().toLowerCase();
                                   return t && myProgramTitles.has(t);
                                 });
+                                const bonus = getReservedUnfilledBonus(s as any);
+                                const reservedMine = getReservedUnfilledForTitles(s as any, myProgramTitles);
                                 return (
                                   <>
                                     {conflicts.length > 0 && (
@@ -224,12 +223,12 @@ const Planejador = () => {
                                         </Tooltip>
                                       </TooltipProvider>
                                     )}
-                                    {hasExclusive && (
+                                    {hasExclusive && reservedMine > 0 && (
                                       <TooltipProvider>
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-primary text-primary-foreground inline-flex items-center gap-1 cursor-default">
-                                              <Star className="w-3 h-3" /> Exclusiva ({available})
+                                              <Star className="w-3 h-3" /> Reservado ({reservedMine})
                                             </span>
                                           </TooltipTrigger>
                                           <TooltipContent>
@@ -238,6 +237,13 @@ const Planejador = () => {
                                         </Tooltip>
                                       </TooltipProvider>
                                     )}
+                                    {/* Bônus Lixão oculto temporariamente
+                                    {bonus > 0 && (
+                                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-accent text-accent-foreground border border-border inline-flex items-center gap-1 cursor-default">
+                                        <Trash2 className="w-3 h-3" /> Bônus Lixão ({bonus})
+                                      </span>
+                                    )}
+                                    */}
                                   </>
                                 );
                               })()}

@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { getCompetitionLevel, getPhase1Level, getPhase2Level } from '@/lib/competition';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
+import { getReservedUnfilledBonus, getReservedUnfilledForTitles } from '@/lib/utils';
 
 export function ScheduleSummary() {
   const { mySections, toggleSection, getConflictsForSection } = useMySections();
@@ -66,6 +67,8 @@ export function ScheduleSummary() {
             const t = ((r as any)?.program?.title || '').trim().toLowerCase();
             return t && myProgramTitles.has(t);
           });
+          const bonus = getReservedUnfilledBonus(s as any);
+          const reservedMine = getReservedUnfilledForTitles(s as any, myProgramTitles);
 
           return (
             <div key={`${disciplineCode}-${classCode}`} className="p-3 rounded-lg border border-border bg-muted/40">
@@ -108,10 +111,7 @@ export function ScheduleSummary() {
                   <span>{seatsAccepted}/{seatsCount}</span>
                 </div>
                 <Progress value={progress} />
-                <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                  <span>Etapa 1: <span className="font-medium text-foreground">{seatsRequested}</span></span>
-                  <span>Etapa 2: <span className="font-medium text-foreground">{seatsRerequested}</span></span>
-                </div>
+                
                 {/* Tags moved to bottom, allow wrap */}
                 <div className="flex flex-wrap gap-1 mt-2">
                   {alternatives > 0 && (
@@ -147,12 +147,12 @@ export function ScheduleSummary() {
                       </Tooltip>
                     </TooltipProvider>
                   )}
-                  {hasExclusive && (
+                  {hasExclusive && reservedMine > 0 && (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-primary text-primary-foreground inline-flex items-center gap-1 cursor-default">
-                            <Star className="w-3 h-3" /> Exclusiva ({available})
+                            <Star className="w-3 h-3" /> Reservado ({reservedMine})
                           </span>
                         </TooltipTrigger>
                         <TooltipContent>
@@ -161,6 +161,13 @@ export function ScheduleSummary() {
                       </Tooltip>
                     </TooltipProvider>
                   )}
+                  {/* Bônus Lixão oculto temporariamente
+                  {bonus > 0 && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-accent text-accent-foreground border border-border inline-flex items-center gap-1 cursor-default">
+                      <Trash2 className="w-3 h-3" /> Bônus Lixão ({bonus})
+                    </span>
+                  )}
+                  */}
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
