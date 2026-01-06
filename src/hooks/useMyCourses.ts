@@ -36,7 +36,7 @@ export function useMyCourses() {
         const idx = indexByCode.get(c.code) as any;
         return {
           code: c.code,
-          name: c.name,
+          name: idx?.name ?? c.name,
           level: typeof c.semester === 'number' ? `Nível ${c.semester}` : (c.level ?? ''),
           type: c.type,
           credits: c.credits,

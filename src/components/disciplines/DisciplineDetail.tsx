@@ -1,10 +1,10 @@
-import { X, Check, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { X, Check, ChevronDown, ChevronUp, Clock, Star } from 'lucide-react';
 import { Course, parseSigaaSchedule } from '@/services/api';
 import type { Section } from '@/services/api';
 import { useCourseSections, useCourseByCode, useCourses } from '@/hooks/useApi';
 import { useApp } from '@/contexts/AppContext';
 import { useMySections } from '@/hooks/useMySections';
-import { cn } from '@/lib/utils';
+import { cn, getFreeSeats } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { useFavoriteCourses } from '@/hooks/useFavoriteCourses';
 import { useEffect, useRef, useState } from 'react';
@@ -246,7 +246,9 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
                   <p className="text-muted-foreground text-sm">Nenhuma turma disponível para esta disciplina no momento.</p>
                 ) : (
                   <div className="space-y-3">
-                    {sections.map((section) => {
+                    {[...sections]
+                      .sort((a, b) => getFreeSeats(b) - getFreeSeats(a))
+                      .map((section) => {
                       const isAdded = mySections.some((s) => s.id_ref === section.id_ref);
                       return (
                         <SectionCard
@@ -274,24 +276,38 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
               />
 
               <CollapseAnimated open={openPrereq}>
-                  {(currentDetail?.prerequisites?.length || 0) > 1 && (
-                    <div className="flex items-center gap-2 flex-wrap mb-3">
-                      {currentDetail!.prerequisites!.map((_, i) => (
-                        <button
-                          key={`pr-option-${i}`}
-                          className={cn(
-                            'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
-                            prereqOptionIndex === i
-                              ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25'
-                              : 'bg-muted text-muted-foreground hover:bg-accent',
-                          )}
-                          onClick={() => setPrereqOptionIndex(i)}
-                        >
-                          {`Opção ${i + 1}`}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {(() => {
+                    const options = currentDetail?.prerequisites || [];
+                    const remainingCounts = options.map((opt) => {
+                      const list = opt || [];
+                      return list.reduce((acc, item) => {
+                        const code = (item as any)?.code;
+                        return acc + (code && !completedDisciplines.includes(code) ? 1 : 0);
+                      }, 0);
+                    });
+                    const minRemaining = remainingCounts.length > 0 ? Math.min(...remainingCounts) : 0;
+                    return (
+                      <div className="flex items-center gap-2 flex-wrap mb-3">
+                        {options.map((_, i) => (
+                          <button
+                            key={`pr-option-${i}`}
+                            className={cn(
+                              'px-3 py-1.5 rounded-full text-xs font-medium transition-all inline-flex items-center gap-1',
+                              prereqOptionIndex === i
+                                ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25'
+                                : 'bg-muted text-muted-foreground hover:bg-accent',
+                            )}
+                            onClick={() => setPrereqOptionIndex(i)}
+                          >
+                            {`Opção ${i + 1}`}
+                            {remainingCounts[i] === minRemaining && (
+                              <Star className="w-3 h-3 text-yellow-500" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
 
                   <div className="grid grid-cols-1 gap-3">
                     {(currentDetail!.prerequisites![prereqOptionIndex] || []).map((pr) => {

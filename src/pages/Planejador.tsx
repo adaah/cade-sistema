@@ -8,7 +8,7 @@ import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useApp } from '@/contexts/AppContext';
 import { Course, Section } from '@/services/api';
-import { Clock, Users, Plus, BadgeInfo, AlertTriangle, AlertCircle, Star, Flame, Trash2 } from 'lucide-react';
+import { Clock, Users, Plus, BadgeInfo, AlertTriangle, AlertCircle, Star, Flame, Trash2, Heart } from 'lucide-react';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { cn, getReservedUnfilledBonus, getReservedUnfilledForTitles } from '@/lib/utils';
 import {useMyCourses} from "@/hooks/useMyCourses.ts";
@@ -94,7 +94,21 @@ const Planejador = () => {
 
             {/* Catálogo de turmas favoritas */}
             <div className="bg-card rounded-xl border border-border p-4">
-              <h3 className="font-semibold text-card-foreground mb-3">Turmas de Disciplinas Favoritas</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-card-foreground">Turmas de Disciplinas Favoritas</h3>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground border border-border cursor-default">
+                        <Heart className="w-3 h-3 text-rose-500" /> {favoriteCodes.length}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div>Total de disciplinas favoritadas</div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               <div className="flex gap-2 mb-3">
                 {[
                   { id: 'all', label: 'Todos' },

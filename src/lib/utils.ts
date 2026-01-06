@@ -9,14 +9,6 @@ export function cn(...inputs: ClassValue[]) {
 export const getSemesterTitle = (level: string) => level.replace("Nível", "Semestre")
 
 // Helpers de vagas reservadas da turma
-export function getTotalSportReservedAccepted(aSection: Section): number {
-  const list = Array.isArray(aSection?.spots_reserved) ? aSection.spots_reserved : [];
-  return list.reduce((sum, item) => {
-    const accepted = (item as any)?.seats_accepted ?? 0;
-    return sum + Math.max(0, Number(accepted));
-  }, 0);
-}
-
 export function getTotalSportReservedCount(aSection: Section): number {
   const list = Array.isArray(aSection?.spots_reserved) ? aSection.spots_reserved : [];
   return list.reduce((sum, item) => {
@@ -26,9 +18,8 @@ export function getTotalSportReservedCount(aSection: Section): number {
 }
 
 export function getReservedUnfilledBonus(aSection: Section): number {
-  const total = getTotalSportReservedCount(aSection);
-  const accepted = getTotalSportReservedAccepted(aSection);
-  return Math.max(0, total - accepted);
+  // Agora a API retorna diretamente o total para reservadas
+  return getTotalSportReservedCount(aSection);
 }
 
 export function getReservedUnfilledForTitles(aSection: Section, titles: Set<string>): number {
@@ -38,8 +29,14 @@ export function getReservedUnfilledForTitles(aSection: Section, titles: Set<stri
     const title = (((item as any)?.program?.title) || '').trim().toLowerCase();
     if (!title || !titles.has(title)) continue;
     const count = Math.max(0, Number((item as any)?.seats_count ?? 0));
-    const accepted = Math.max(0, Number((item as any)?.seats_accepted ?? 0));
-    sum += Math.max(0, count - accepted);
+    sum += count;
   }
   return Math.max(0, sum);
+}
+
+// Vagas livres de uma turma (geral)
+export function getFreeSeats(aSection: Section): number {
+  const count = Math.max(0, Number((aSection as any)?.seats_count ?? 0));
+  const accepted = Math.max(0, Number((aSection as any)?.seats_accepted ?? 0));
+  return Math.max(0, count - accepted);
 }

@@ -95,7 +95,6 @@ export interface Section {
       code?: string;
       detail_url?: string;
     };
-    seats_accepted: number;
     seats_count: number;
   }>;
   teachers: string[];
