@@ -5,6 +5,7 @@ import { useMyPrograms } from '@/hooks/useMyPrograms';
 import type { Course } from '@/services/api';
 import type { ProgramDetail } from '@/services/api';
 import { fetchProgramDetail } from '@/services/api';
+import { useCourses } from '@/hooks/useApi';
 
 // Aggregates courses from all selected programs, running N parallel queries.
 export function useMyCourses() {
@@ -22,25 +23,41 @@ export function useMyCourses() {
 
   const isLoading = batchResults.some((r) => r.isLoading);
 
+  // Índice global de cursos (contém sections_count, sections_url etc.)
+  const { data: coursesIndex = [] } = useCourses();
+
   const courses: Course[] = useMemo(() => {
+    const indexByCode = new Map(coursesIndex.map((c) => [c.code, c]));
     // Extrai e deduplica disciplinas (por código) a partir dos ProgramDetail
     const all: Course[] = batchResults.flatMap((r) => {
       const pd = (r.data as unknown as ProgramDetail) || ({} as ProgramDetail);
       const list = Array.isArray(pd?.courses) ? pd.courses : [];
-      return list.map((c: any) => ({
-        code: c.code,
-        name: c.name,
-        level: typeof c.semester === 'number' ? `Nível ${c.semester}` : (c.level ?? ''),
-        type: c.type,
-        credits: c.credits,
-        workload: c.workload,
-        prerequisites: c.prerequisites,
-      })) as Course[];
+      return list.map((c: any) => {
+        const idx = indexByCode.get(c.code) as any;
+        return {
+          code: c.code,
+          name: idx?.name ?? c.name,
+          level: typeof c.semester === 'number' ? `Nível ${c.semester}` : (c.level ?? ''),
+          type: c.type,
+          credits: c.credits,
+          workload: c.workload,
+          prerequisites: c.prerequisites,
+          // Enriquecimento a partir do índice
+          sections_count: idx?.sections_count ?? 0,
+          sections_url: idx?.sections_url,
+          detail_url: idx?.detail_url,
+          mode: idx?.mode,
+          location: idx?.location,
+          id_ref: idx?.id_ref,
+          department: idx?.department,
+          code_url: idx?.code_url,
+        } as Course;
+      }) as Course[];
     });
 
     const byCode = new Map(all.map((c) => [c.code, c]));
     return Array.from(byCode.values());
-  }, [batchResults]);
+  }, [batchResults, coursesIndex]);
 
   const types = useMemo(() => pipe(
     map((r) => r.type),

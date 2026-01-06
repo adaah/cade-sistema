@@ -1,29 +1,92 @@
 import { useState } from 'react';
-import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
+import { useMySections } from '@/hooks/useMySections';
+import { getSpplitedCode } from '@/lib/schedule';
 
 const days = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const hours = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
 
 const dayMap: Record<string, string> = {
-  'Seg': 'Seg',
-  'Ter': 'Ter',
-  'Qua': 'Qua',
-  'Qui': 'Qui',
-  'Sex': 'Sex',
-  'Sáb': 'Sáb'
+  '2': 'Seg',
+  '3': 'Ter',
+  '4': 'Qua',
+  '5': 'Qui',
+  '6': 'Sex',
+  '7': 'Sáb',
 };
+
+type ScheduledItem = {
+  disciplineCode: string;
+  disciplineName: string;
+  classCode: string;
+  professor: string;
+  color: string;
+  day: string; // 'Seg' | 'Ter' | ...
+  startTime: string;
+  endTime: string;
+};
+
+const COLORS = [
+  'hsl(217, 91%, 60%)',
+  'hsl(142, 71%, 45%)',
+  'hsl(280, 65%, 60%)',
+  'hsl(0, 72%, 51%)',
+  'hsl(38, 92%, 50%)',
+  'hsl(180, 65%, 45%)',
+  'hsl(320, 65%, 52%)',
+  'hsl(45, 93%, 47%)',
+];
+
+function colorFor(code: string) {
+  let hash = 0;
+  for (let i = 0; i < code.length; i++) hash = ((hash << 5) - hash) + code.charCodeAt(i);
+  const idx = Math.abs(hash) % COLORS.length;
+  return COLORS[idx];
+}
 
 export function MobileSchedule() {
   const [activeDay, setActiveDay] = useState('Seg');
-  const { scheduledItems, removeFromSchedule } = useApp();
+  const { mySections, toggleSection } = useMySections();
+
+  // Build items from mySections using cartesian time codes
+  const scheduledItems: ScheduledItem[] = [];
+  for (const s of mySections) {
+    const disciplineCode = (s as any)?.course?.code || (s as any)?.course_code || '';
+    const disciplineName = (s as any)?.course?.name || disciplineCode;
+    const classCode = (s as any)?.section_code || s.id_ref;
+    const professor = Array.isArray((s as any)?.teachers) && (s as any).teachers.length > 0
+      ? (s as any).teachers.join(', ')
+      : ((s as any)?.professor || '');
+
+    const codes = Array.isArray(s.time_codes) ? s.time_codes : [];
+    const discreteCodes = codes.flatMap((c) => getSpplitedCode(c));
+
+    for (const code of discreteCodes) {
+      const match = code.match(/^([2-7])([MTN])([1-6])$/i);
+      if (!match) continue;
+      const [, dayNum, shift, slotStr] = match;
+      const day = dayMap[dayNum];
+      const base = shift === 'M' ? 7 : shift === 'T' ? 13 : 18;
+      const slot = parseInt(slotStr, 10);
+      const startHour = base + (slot - 1);
+      const endHour = startHour + 1;
+
+      scheduledItems.push({
+        disciplineCode,
+        disciplineName,
+        classCode,
+        professor,
+        color: colorFor(disciplineCode),
+        day,
+        startTime: `${startHour.toString().padStart(2, '0')}:00`,
+        endTime: `${endHour.toString().padStart(2, '0')}:00`,
+      });
+    }
+  }
 
   const getItemsForDay = (day: string) => {
-    return scheduledItems.filter(item => {
-      const itemDay = dayMap[item.day] || item.day;
-      return itemDay === day;
-    });
+    return scheduledItems.filter(item => item.day === day);
   };
 
   const dayItems = getItemsForDay(activeDay);
@@ -35,7 +98,7 @@ export function MobileSchedule() {
       acc.push(item);
     }
     return acc;
-  }, [] as typeof scheduledItems);
+  }, [] as ScheduledItem[]);
 
   // Sort by start time
   uniqueItems.sort((a, b) => {
@@ -123,7 +186,14 @@ export function MobileSchedule() {
                     </p>
                   </div>
                   <button
-                    onClick={() => removeFromSchedule(item.disciplineCode, item.classCode)}
+                    onClick={() => {
+                      const toRemove = mySections.find((s) => {
+                        const dc = (s as any)?.course?.code || (s as any)?.course_code;
+                        const cc = (s as any)?.section_code || s.id_ref;
+                        return dc === item.disciplineCode && cc === item.classCode;
+                      });
+                      if (toRemove) toggleSection(toRemove);
+                    }}
                     className="p-1.5 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
                   >
                     <X className="w-4 h-4" />

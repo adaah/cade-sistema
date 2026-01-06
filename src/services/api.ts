@@ -1,28 +1,9 @@
+import axios, {AxiosResponse} from "axios";
+
 const API_BASE_URL = 'https://FormigTeen.github.io/sigaa-static/api/v1';
 
-// Edge function proxy URL
-const PROXY_URL = 'https://ezupytejdcledagzgaku.supabase.co/functions/v1/sigaa-proxy';
+export const getData = <T>(aResponse: AxiosResponse<T>) => aResponse.data;
 
-const cache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_DURATION = 1000 * 60 * 5;
-
-async function fetchWithCache<T>(url: string): Promise<T> {
-  const cached = cache.get(url);
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return cached.data as T;
-  }
-
-  console.log(`Fetching: ${url}`);
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to load data from ${url}`);
-  }
-  const data = await response.json();
-  cache.set(url, { data, timestamp: Date.now() });
-  return data as T;
-}
-
-// Tipos TypeScript baseados no payload bruto da API
 export interface Program {
   title: string;
   location: string;
@@ -32,7 +13,6 @@ export interface Program {
   id_ref: string;
   code: string;
   detail_url: string;
-  [key: string]: any;
 }
 
 export interface CourseApi {
@@ -50,6 +30,16 @@ export interface CourseApi {
   type: string;
 }
 
+interface SyncedCourse {
+  code: string;
+  name: string;
+  id_ref: string;
+}
+
+interface NotSyncedCourse {
+  code: string;
+}
+
 export interface CourseDetail {
   code: string;
   name: string;
@@ -57,13 +47,14 @@ export interface CourseDetail {
   workload?: number;
   semester?: number;
   type?: string;
-  prerequisites?: string[];
   description?: string;
   department?: string;
   mode?: string;
   location?: string;
   id_ref?: string;
-  [key: string]: any;
+  equivalences: Array<Array<NotSyncedCourse | SyncedCourse>>;
+  prerequisites: Array<NotSyncedCourse | SyncedCourse>[];
+  corequisites: Array<NotSyncedCourse | SyncedCourse>[];
 }
 
 export interface ProgramDetail {
@@ -78,28 +69,40 @@ export interface ProgramDetail {
     credits?: number;
     workload?: number;
     prerequisites?: string[];
-    [key: string]: any;
   }>;
-  [key: string]: any;
 }
 
-export interface SectionApi {
-  course_code: string;
-  course_name?: string;
-  section_code: string;
-  professor?: string;
-  schedule?: Array<{ day: string; start_time: string; end_time: string }>;
-  schedule_raw?: string;
-  room?: string;
-  slots?: number;
-  enrolled?: number;
-  available?: number;
-  [key: string]: any;
+export interface Section {
+  course: {
+    code: string;
+    name: string;
+  };
+  id_ref: string;
+  location_table: string;
+  mode: string;
+  seats_accepted: number;
+  seats_count: number;
+  seats_requested: number;
+  seats_rerequested: number;
+  spots_reserved: Array<{
+    program: {
+      title: string;
+      location?: string;
+      program_type?: string;
+      mode?: string;
+      time_code?: string;
+      id_ref?: string;
+      code?: string;
+      detail_url?: string;
+    };
+    seats_count: number;
+  }>;
+  teachers: string[];
+  time_codes: string[];
 }
 
 export type Course = CourseApi;
 
-export type Section = SectionApi;
 
 export interface SectionSchedule {
   day: string;
@@ -108,11 +111,11 @@ export interface SectionSchedule {
 }
 
 export async function fetchPrograms(): Promise<Program[]> {
-  return fetchWithCache<Program[]>(`${API_BASE_URL}/programs.json`);
+  return axios.get<Program[]>(`${API_BASE_URL}/programs.json`).then(getData);
 }
 
 export async function fetchCoursesIndex(): Promise<CourseApi[]> {
-  return fetchWithCache<CourseApi[]>(`${API_BASE_URL}/courses.json`);
+  return axios.get<CourseApi[]>(`${API_BASE_URL}/courses.json`).then(getData);
 }
 
 export async function findCourseSummaryByCode(code: string): Promise<CourseApi | null> {
@@ -122,7 +125,7 @@ export async function findCourseSummaryByCode(code: string): Promise<CourseApi |
 
 export async function fetchCourses(): Promise<Course[]> {
   // Retorna o payload bruto do índice de cursos
-  return fetchWithCache<CourseApi[]>(`${API_BASE_URL}/courses.json`);
+  return axios.get<CourseApi[]>(`${API_BASE_URL}/courses.json`).then(getData);
 }
 
 export async function fetchCoursesForProgram(programIdRef: string): Promise<Course[]> {
@@ -164,44 +167,20 @@ export async function fetchCoursesForProgram(programIdRef: string): Promise<Cour
 }
 
 export async function fetchSections(): Promise<Section[]> {
-  return fetchWithCache<SectionApi[]>(`${API_BASE_URL}/sections.json`);
+  return axios.get<Section[]>(`${API_BASE_URL}/sections.json`).then(getData);
 }
 
 export async function fetchCourseDetail(detailUrl: string): Promise<CourseDetail> {
-  return fetchWithCache<CourseDetail>(detailUrl);
+  return axios.get<CourseDetail>(detailUrl).then(getData);
 }
 
 export async function fetchCourseByCode(code: string): Promise<CourseDetail> {
   const url = `${API_BASE_URL}/course/code/${code}.json`;
-  return fetchWithCache<CourseDetail>(url);
-}
-
-export async function fetchCourseSections(sectionsUrl: string): Promise<Section[]> {
-  const raw = await fetchWithCache<any>(sectionsUrl);
-  const sectionsApi = Array.isArray(raw)
-    ? raw
-    : Array.isArray((raw as any)?.sections)
-      ? (raw as any).sections
-      : [];
-  return sectionsApi as SectionApi[];
+  return axios.get<CourseDetail>(url).then(getData);
 }
 
 export async function fetchSectionsByCourseCode(courseCode: string): Promise<Section[]> {
-  try {
-    const courses = await fetchCoursesIndex();
-    const course = courses.find(c => c.code === courseCode);
-    
-    if (course && course.sections_url) {
-      return fetchCourseSections(course.sections_url);
-    }
-    
-    const allSections = await fetchSections();
-    return allSections.filter(s => s.course_code === courseCode);
-  } catch (error) {
-    console.error(`Error fetching sections for ${courseCode}:`, error);
-    const allSections = await fetchSections();
-    return allSections.filter(s => s.course_code === courseCode);
-  }
+  return axios.get<Section[]>(`${API_BASE_URL}/course/${courseCode}/sections.json`).then(getData)
 }
 
 export function parseSigaaSchedule(raw: string): SectionSchedule[] {
@@ -256,7 +235,7 @@ export function parseSigaaSchedule(raw: string): SectionSchedule[] {
 }
 
 export async function fetchProgramDetail(detailUrl: string): Promise<ProgramDetail> {
-  return fetchWithCache<ProgramDetail>(detailUrl);
+  return axios.get<ProgramDetail>(detailUrl).then(getData);
 }
 
 export async function getProgramCourseCodes(programIdRef: string): Promise<string[]> {
@@ -279,8 +258,4 @@ export async function getProgramCourseCodes(programIdRef: string): Promise<strin
     console.error(`Error fetching courses for program ${programIdRef}:`, error);
     return [];
   }
-}
-
-export function clearApiCache() {
-  cache.clear();
 }
