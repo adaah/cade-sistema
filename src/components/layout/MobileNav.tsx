@@ -3,10 +3,10 @@ import { NavLink } from '@/components/NavLink';
 import { cn } from '@/lib/utils';
 
 const menuItems = [
-  { title: 'Início', url: '/', icon: Home, disabled: true },
+  { title: 'Início', url: '/', icon: Home },
   { title: 'Disciplinas', url: '/disciplinas', icon: BookOpen },
   { title: 'Planejador', url: '/planejador', icon: Calendar },
-  { title: 'Mais', url: '/configuracoes', icon: MoreHorizontal },
+  { title: 'Configurações', url: '/configuracoes', icon: MoreHorizontal },
 ];
 
 export function MobileNav() {
@@ -17,23 +17,11 @@ export function MobileNav() {
           <li key={item.url}>
             <NavLink
               to={item.url}
-              onClick={item.disabled ? (e) => { e.preventDefault(); e.stopPropagation(); } : undefined}
-              aria-disabled={item.disabled ? true : undefined}
-              className={cn(
-                "flex flex-col items-center justify-center px-3 py-2 rounded-lg",
-                item.disabled
-                  ? "text-muted-foreground/70 cursor-not-allowed"
-                  : "text-muted-foreground transition-colors"
-              )}
+              className="flex flex-col items-center justify-center px-3 py-2 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
               activeClassName="text-primary"
             >
               <item.icon className="w-6 h-6" />
               <span className="text-xs mt-1 font-medium">{item.title}</span>
-              {item.disabled && (
-                <span className="text-[9px] mt-0.5 px-1 py-0 rounded-full bg-muted border border-border text-muted-foreground">
-                  Em breve
-                </span>
-              )}
             </NavLink>
           </li>
         ))}

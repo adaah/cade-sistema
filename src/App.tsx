@@ -32,8 +32,7 @@ function AppContent() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Redireciona / para Disciplinas por enquanto */}
-        <Route path="/" element={<Navigate to="/disciplinas" replace />} />
+        <Route path="/" element={<Index />} />
         <Route path="/disciplinas" element={<Disciplinas />} />
         <Route path="/planejador" element={<Planejador />} />
         <Route path="/configuracoes" element={<Configuracoes />} />
