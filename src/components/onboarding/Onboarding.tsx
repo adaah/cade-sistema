@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { Check, GraduationCap, Search, Loader2, MapPin, ChevronDown, Filter } from 'lucide-react';
+import { Check, GraduationCap, Search, Loader2, MapPin, ChevronDown, Filter, X, School, BookOpen, Sun, Sunset, Moon, Clock } from 'lucide-react';
 import { AnimatePresence, motion, AnimatePresence as MotionPresence } from 'framer-motion';
 import { useApp } from '@/contexts/AppContext';
 import { usePrograms } from '@/hooks/useApi';
@@ -248,6 +248,10 @@ export function Onboarding() {
     setSelectedId(prev => prev === id ? null : id);
   };
 
+  const clearSelection = () => {
+    setSelectedId(null);
+  };
+
   const handleSubmit = () => {
     if (selectedId) {
       setSelectedPrograms([selectedId]);
@@ -390,13 +394,27 @@ export function Onboarding() {
                               <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                                 {program.program_type && (
                                   <span className="inline-flex items-center text-xs text-muted-foreground">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 mr-1.5" />
+                                    {program.program_type === 'BACHARELADO' ? (
+                                      <GraduationCap className="w-3 h-3 mr-1.5 text-muted-foreground/70" />
+                                    ) : program.program_type === 'LICENCIATURA' ? (
+                                      <School className="w-3 h-3 mr-1.5 text-muted-foreground/70" />
+                                    ) : (
+                                      <BookOpen className="w-3 h-3 mr-1.5 text-muted-foreground/70" />
+                                    )}
                                     {program.program_type}
                                   </span>
                                 )}
                                 {program.time_code && (program.time_code === 'MT' || program.time_code === 'N' || program.time_code === 'T' || program.time_code === 'M' || program.time_code === 'I' || program.time_code === 'MN' || program.time_code === 'TN' || program.time_code === 'MTN') && (
                                   <span className="inline-flex items-center text-xs text-muted-foreground">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 mr-1.5" />
+                                    {program.time_code === 'M' || program.time_code === 'MT' ? (
+                                      <Sun className="w-3 h-3 mr-1.5 text-muted-foreground/70" />
+                                    ) : program.time_code === 'T' ? (
+                                      <Sunset className="w-3 h-3 mr-1.5 text-muted-foreground/70" />
+                                    ) : program.time_code === 'N' ? (
+                                      <Moon className="w-3 h-3 mr-1.5 text-muted-foreground/70" />
+                                    ) : (
+                                      <Clock className="w-3 h-3 mr-1.5 text-muted-foreground/70" />
+                                    )}
                                     {getTurnoNome(program.time_code)}
                                   </span>
                                 )}
@@ -437,8 +455,15 @@ export function Onboarding() {
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mb-4 p-3 bg-muted/30 rounded-lg border border-border/50"
+                  className="mb-4 p-3 bg-muted/30 rounded-lg border border-border/50 relative"
                 >
+                  <button
+                    onClick={clearSelection}
+                    className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Remover seleção"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                   <h3 className="text-xs font-medium text-muted-foreground mb-1.5">Curso selecionado:</h3>
                   <div className="flex items-start">
                     <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mr-2">
