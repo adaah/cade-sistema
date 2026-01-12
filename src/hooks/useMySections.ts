@@ -13,38 +13,15 @@ export function useMySections() {
 
   const toggleSection = (aSection: Section) => {
     setMySections((current) => {
-      const conflictingIds = new Set<string>(
-        (aSection.time_codes || [])
-          .flatMap((code) => hasSectionOnCode(code))
-          .map((res) => res.section.id_ref)
-      );
-
       const next = produce(current, (draft) => {
         const idxSameId = draft.findIndex((s) => s.id_ref === aSection.id_ref);
         if (idxSameId >= 0) {
+          // Se a seção já existe, remove ela
           draft.splice(idxSameId, 1);
-          return;
+        } else {
+          // Adiciona a nova seção sem remover as conflitantes
+          draft.push(aSection);
         }
-
-        // Remove all conflicting sections by id_ref first
-        if (conflictingIds.size > 0) {
-          for (let i = draft.length - 1; i >= 0; i--) {
-            if (conflictingIds.has(draft[i].id_ref)) draft.splice(i, 1);
-          }
-        }
-
-        // Then keep the existing rule: only one section per course
-        const courseCode = aSection.course.code;
-        if (courseCode) {
-          for (let i = draft.length - 1; i >= 0; i--) {
-            const s = draft[i];
-            if ((s.course?.code || (s as any)?.course_code) === courseCode) {
-              draft.splice(i, 1);
-            }
-          }
-        }
-
-        draft.push(aSection);
       });
       return next;
     });
@@ -105,15 +82,32 @@ export function useMySections() {
   };
 
   const getConflictsForSection = (aSection: Section): Array<{ code: string; section: Section }> => {
+    if (!aSection.time_codes) return [];
+    
+    const conflicts: Array<{ code: string; section: Section }> = [];
     const seen = new Set<string>();
-    return (aSection.time_codes || [])
-      .flatMap((code) => hasSectionOnCode(code))
-      .filter(({ section }) => section.id_ref !== aSection.id_ref)
-      .filter(({ section }) => {
-        if (seen.has(section.id_ref)) return false;
-        seen.add(section.id_ref);
-        return true;
-      });
+    
+    // Para cada time_code da seção
+    for (const timeCode of aSection.time_codes) {
+      // Quebra o time_code em códigos individuais (dias e horários)
+      const codes = getSpplitedCode(timeCode);
+      
+      // Para cada código individual
+      for (const code of codes) {
+        // Encontra todas as seções que compartilham este código
+        const sectionsWithSameCode = hasSectionOnCode(code);
+        
+        // Adiciona à lista de conflitos, se não for a própria seção e não for duplicada
+        for (const { section, code: conflictCode } of sectionsWithSameCode) {
+          if (section.id_ref !== aSection.id_ref && !seen.has(section.id_ref)) {
+            conflicts.push({ code: conflictCode, section });
+            seen.add(section.id_ref);
+          }
+        }
+      }
+    }
+    
+    return conflicts;
   };
 
   return {

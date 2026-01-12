@@ -18,17 +18,7 @@ export function ScheduleSummary() {
   const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
 
   if (mySections.length === 0) {
-    return (
-      <div className="bg-card rounded-xl border border-border p-6 text-center">
-        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
-          <Calendar className="w-6 h-6 text-muted-foreground" />
-        </div>
-        <h3 className="font-semibold text-card-foreground mb-1">Nenhuma turma adicionada</h3>
-        <p className="text-sm text-muted-foreground">
-          Adicione turmas pelo catálogo de disciplinas
-        </p>
-      </div>
-    );
+    return null; // Não renderiza nada quando não há turmas
   }
 
   return (

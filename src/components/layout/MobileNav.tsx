@@ -11,7 +11,7 @@ const menuItems = [
 
 export function MobileNav() {
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 animate-slide-in-bottom">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border/50 z-50 shadow-lg">
       <ul className="flex justify-around items-center h-16 px-2">
         {menuItems.map((item) => (
           <li key={item.url}>
