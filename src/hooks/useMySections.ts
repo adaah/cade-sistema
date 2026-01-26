@@ -14,12 +14,25 @@ export function useMySections() {
   const toggleSection = (aSection: Section) => {
     setMySections((current) => {
       const next = produce(current, (draft) => {
-        const idxSameId = draft.findIndex((s) => s.id_ref === aSection.id_ref);
-        if (idxSameId >= 0) {
-          // Se a seção já existe, remove ela
-          draft.splice(idxSameId, 1);
+        // Verifica se já existe uma turma da mesma disciplina
+        const courseCode = aSection.course?.code || (aSection as any)?.course_code;
+        const existingSectionIndex = draft.findIndex((s) => {
+          const sCourseCode = s.course?.code || (s as any)?.course_code;
+          return sCourseCode === courseCode;
+        });
+        
+        if (existingSectionIndex >= 0) {
+          const existingSection = draft[existingSectionIndex];
+          
+          // Se é a mesma turma, remove ela
+          if (existingSection.id_ref === aSection.id_ref) {
+            draft.splice(existingSectionIndex, 1);
+          } else {
+            // Se é outra turma da mesma disciplina, substitui
+            draft[existingSectionIndex] = aSection;
+          }
         } else {
-          // Adiciona a nova seção sem remover as conflitantes
+          // Se não existe nenhuma turma desta disciplina, adiciona
           draft.push(aSection);
         }
       });
@@ -73,6 +86,16 @@ export function useMySections() {
     return !!byCourseCode[code];
   };
 
+  // Nova função para verificar se uma turma específica está selecionada
+  const hasSection = (sectionId: string): boolean => {
+    return !!byIdRef[sectionId];
+  };
+
+  // Função para obter a turma atual de uma disciplina
+  const getSectionForCourse = (courseCode: string): Section | null => {
+    return byCourseCode[courseCode] || null;
+  };
+
   const hasSectionOnCode = (code: string): Array<{ code: string; section: Section }> => {
     if (!code) return [];
     const keys = getSpplitedCode(code);
@@ -120,6 +143,8 @@ export function useMySections() {
     byCourseCode,
     byCartesianCode,
     hasSectionOnCourse,
+    hasSection,
+    getSectionForCourse,
     hasSectionOnCode,
     getConflictsForSection,
   } as const;

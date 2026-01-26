@@ -7,8 +7,8 @@ import { AlertTriangle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const days = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const hours = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
-const hoursCompact = ['07:00', '08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+const hours = ['07:00', '07:55', '08:50', '09:45', '10:40', '11:35', '13:00', '13:55', '14:50', '15:45', '16:40', '17:35', '18:30', '19:25', '20:20', '21:15'];
+const hoursCompact = ['07:00', '07:55', '08:50', '09:45', '10:40', '11:35', '13:00', '13:55', '14:50', '15:45', '16:40', '17:35', '18:30', '19:25', '20:20', '21:15'];
 
 const dayMap: Record<string, string> = {
   '2': 'Seg',
@@ -75,10 +75,28 @@ export function ScheduleGrid({ onSectionClick }: ScheduleGridProps = {}) {
       if (!match) continue;
       const [, dayNum, shift, slotStr] = match;
       const day = dayMap[dayNum];
-      const base = shift === 'M' ? 7 : shift === 'T' ? 13 : 18;
-      const slot = parseInt(slotStr, 10);
-      const startHour = base + (slot - 1);
-      const endHour = startHour + 1;
+      const slot = parseInt(slotStr, 10) - 1; // Convert para 0-based index
+      
+      // Mapeamento de horários conforme especificação
+      const horariosManha = ['07:00', '07:55', '08:50', '09:45', '10:40', '11:35'];
+      const horariosTarde = ['13:00', '13:55', '14:50', '15:45', '16:40', '17:35'];
+      const horariosNoite = ['18:30', '19:25', '20:20', '21:15'];
+      
+      let startTime: string;
+      let endTime: string;
+      
+      if (shift === 'M') {
+        startTime = horariosManha[slot];
+        endTime = slot < horariosManha.length - 1 ? horariosManha[slot + 1] : '12:00';
+      } else if (shift === 'T') {
+        startTime = horariosTarde[slot];
+        endTime = slot < horariosTarde.length - 1 ? horariosTarde[slot + 1] : '18:00';
+      } else if (shift === 'N') {
+        startTime = horariosNoite[slot];
+        endTime = slot < horariosNoite.length - 1 ? horariosNoite[slot + 1] : '22:00';
+      } else {
+        continue;
+      }
 
       scheduledItems.push({
         disciplineCode,
@@ -87,8 +105,8 @@ export function ScheduleGrid({ onSectionClick }: ScheduleGridProps = {}) {
         professor,
         color: colorFor(disciplineCode),
         day,
-        startTime: `${startHour.toString().padStart(2, '0')}:00`,
-        endTime: `${endHour.toString().padStart(2, '0')}:00`,
+        startTime,
+        endTime,
         section: s,
       });
     }
@@ -247,19 +265,20 @@ export function ScheduleGrid({ onSectionClick }: ScheduleGridProps = {}) {
                                 }}
                               >
                                 <div className={cn(
-                                  "flex flex-col gap-0.5 p-1 w-full",
-                                  isMobile ? "text-[9px] leading-tight" : "text-xs"
+                                  "flex flex-col justify-center items-center p-1 w-full h-full relative",
+                                  isMobile ? "text-[8px] leading-none" : "text-xs"
                                 )}>
-                                  <div className="flex items-start gap-1">
-                                    {item.hasConflict && (
-                                      <AlertTriangle className="w-3 h-3 text-white flex-shrink-0 mt-0.5" />
-                                    )}
-                                    <div className="font-semibold truncate">
-                                      {item.disciplineCode}
-                                    </div>
-                                  </div>
-                                  <div className="text-white/80 truncate pl-4">
-                                    {item.classCode}
+                                  {item.hasConflict && (
+                                    <AlertTriangle className={cn(
+                                      "absolute top-0.5 right-0.5 text-white flex-shrink-0",
+                                      isMobile ? "w-2.5 h-2.5" : "w-3 h-3"
+                                    )} />
+                                  )}
+                                  <div className={cn(
+                                    "font-bold text-center w-full truncate",
+                                    isMobile ? "text-[8px]" : "text-xs"
+                                  )}>
+                                    {item.disciplineCode}
                                   </div>
                                 </div>
                               </div>

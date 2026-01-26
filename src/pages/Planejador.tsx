@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ScheduleGrid } from '@/components/planner/ScheduleGrid';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { useApp } from '@/contexts/AppContext';
 import { Course, Section } from '@/services/api';
-import { Clock, Users, Plus, BadgeInfo, AlertTriangle, AlertCircle, Star, Flame, Trash2, BookOpen, GraduationCap, School, Filter, X, Calendar, CheckCircle, Eye, Search } from 'lucide-react';
+import { Clock, Users, Plus, BadgeInfo, AlertTriangle, AlertCircle, Star, Flame, Trash2, BookOpen, GraduationCap, School, Filter, X, Calendar, CheckCircle, Eye, Search, Loader2 } from 'lucide-react';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { cn, getReservedUnfilledBonus, getReservedUnfilledForTitles } from '@/lib/utils';
 import { useMyCourses } from "@/hooks/useMyCourses.ts";
@@ -51,6 +51,11 @@ const parseTimeCodes = (timeCodes: string[]): Array<{ dia: string; horarioInicio
     '7': 'Sábado',
   };
 
+  // Mapeamento de horários conforme especificação
+  const horariosManha = ['07:00', '07:55', '08:50', '09:45', '10:40', '11:35'];
+  const horariosTarde = ['13:00', '13:55', '14:50', '15:45', '16:40', '17:35'];
+  const horariosNoite = ['18:30', '19:25', '20:20', '21:15'];
+
   for (const code of timeCodes) {
     const discreteCodes = getSpplitedCode(code);
     for (const discreteCode of discreteCodes) {
@@ -59,16 +64,32 @@ const parseTimeCodes = (timeCodes: string[]): Array<{ dia: string; horarioInicio
       
       const [, dayNum, shift, slotStr] = match;
       const day = dayMap[dayNum];
-      const base = shift === 'M' ? 7 : shift === 'T' ? 13 : 18;
-      const slot = parseInt(slotStr, 10);
-      const startHour = base + (slot - 1);
-      const endHour = startHour + 1;
+      const slot = parseInt(slotStr, 10) - 1; // Convert para 0-based index
       
-      if (day) {
+      let horarioInicio: string;
+      let horarioFim: string;
+      
+      if (shift === 'M') {
+        // Manhã: 07:00-07:55, 07:55-08:50, etc.
+        horarioInicio = horariosManha[slot];
+        horarioFim = slot < horariosManha.length - 1 ? horariosManha[slot + 1] : '12:00';
+      } else if (shift === 'T') {
+        // Tarde: 13:00-13:55, 13:55-14:50, etc.
+        horarioInicio = horariosTarde[slot];
+        horarioFim = slot < horariosTarde.length - 1 ? horariosTarde[slot + 1] : '18:00';
+      } else if (shift === 'N') {
+        // Noite: 18:30-19:25, 19:25-20:20, etc.
+        horarioInicio = horariosNoite[slot];
+        horarioFim = slot < horariosNoite.length - 1 ? horariosNoite[slot + 1] : '22:00';
+      } else {
+        continue;
+      }
+      
+      if (day && horarioInicio) {
         horarios.push({
           dia: day,
-          horarioInicio: `${startHour.toString().padStart(2, '0')}:00`,
-          horarioFim: `${endHour.toString().padStart(2, '0')}:00`
+          horarioInicio,
+          horarioFim
         });
       }
     }
@@ -85,6 +106,8 @@ const Planejador = () => {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isLoadingSections, setIsLoadingSections] = useState(false);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Estado para curso selecionado para visualização
   const [selectedViewProgramId, setSelectedViewProgramId] = useState<string | null>(null);
   // Estado para busca de cursos no seletor
@@ -208,6 +231,12 @@ const Planejador = () => {
     
     let result = [...courses];
     
+    // Filtrar disciplinas com 0 turmas
+    result = result.filter(course => {
+      const sectionsCount = course.sections_count || 0;
+      return sectionsCount > 0;
+    });
+    
     // Aplicar filtro de busca
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -217,22 +246,57 @@ const Planejador = () => {
       );
     }
     
-    // Nota: A filtragem por horários/dias será feita quando as seções forem carregadas
-    // Por enquanto, apenas retornamos as disciplinas filtradas por busca
+    // Aplicar filtros de dias e horários
+    if (diasSelecionados.length > 0 || horariosSelecionados.length > 0 || 
+        diasRestritos.length > 0 || horariosRestritos.length > 0) {
+      result = result.filter(course => {
+        // Aqui precisaríamos verificar as turmas da disciplina
+        // Por enquanto, vamos manter a lógica simples e adicionar uma nota
+        // TODO: Implementar filtragem por dias/horários nas disciplinas
+        return true; // Temporariamente, todas as disciplinas passam
+      });
+    }
     
     return result;
-  }, [courses, searchTerm]);
+  }, [courses, searchTerm, diasSelecionados, horariosSelecionados, diasRestritos, horariosRestritos]);
+
+  // Calcular total de turmas ofertadas para o semestre
+  const totalTurmasSemestre = useMemo(() => {
+    if (!courses) return 0;
+    return courses.reduce((total, course) => {
+      return total + (course.sections_count || 0);
+    }, 0);
+  }, [courses]);
 
   // Função para carregar as turmas de uma disciplina
   const handleShowSections = (course: Course) => {
+    // Limpar timeout anterior se existir
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+    }
+    
+    setIsLoadingSections(true);
     setSelectedCourse(course);
     setShowSections(true);
+    
+    // Simular um pequeno delay para mostrar o loading
+    loadingTimeoutRef.current = setTimeout(() => {
+      setIsLoadingSections(false);
+      loadingTimeoutRef.current = null;
+    }, 500);
   };
 
   // Fechar o modal de turmas
   const handleCloseSections = () => {
+    // Limpar timeout se existir
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+    
     setShowSections(false);
     setSelectedCourse(null);
+    setIsLoadingSections(false);
   };
 
   // Limpar filtros
@@ -250,6 +314,8 @@ const Planejador = () => {
   // Aplicar filtros
   const aplicarFiltros = () => {
     setFiltroModalOpen(false);
+    // Força a atualização da lista de disciplinas para aplicar os filtros
+    // Isso será feito através da dependência das variáveis de filtro no useMemo
   };
 
   return (
@@ -345,7 +411,7 @@ const Planejador = () => {
                   )}
                 </div>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground border border-border cursor-default">
-                  {courses?.length || 0} disciplinas
+                  {courses?.length || 0} disciplinas • {totalTurmasSemestre} turmas
                 </span>
               </div>
 
@@ -356,7 +422,7 @@ const Planejador = () => {
                   placeholder="Buscar disciplina..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring focus:border-blue-300 md:w-auto"
+                  className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-background text-foreground placeholder-muted-foreground border-border md:w-auto"
                   style={{ minWidth: 0 }}
                 />
                 <button
@@ -416,8 +482,8 @@ const Planejador = () => {
             <div className="space-y-4 md:space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Grade Atual</h2>
-                  <p className="text-sm md:text-base text-gray-600">
+                  <h2 className="text-xl md:text-2xl font-bold text-foreground mb-1">Grade Atual</h2>
+                  <p className="text-sm md:text-base text-muted-foreground">
                     Visualize as disciplinas convertidas e organizadas
                   </p>
                 </div>
@@ -459,16 +525,16 @@ const Planejador = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 20 }}
               >
-                <div className="flex items-center justify-between mb-4 border-b pb-2">
+                <div className="flex items-center justify-between mb-4 border-b pb-2 border-border">
                   <div className="flex items-center gap-2">
                     <Filter className="w-5 h-5 text-blue-600" />
-                    <h3 className="text-lg font-bold text-gray-900">Filtro de Disciplinas</h3>
+                    <h3 className="text-lg font-bold text-foreground">Filtro de Disciplinas</h3>
                   </div>
                   <Button 
                     variant="ghost" 
                     size="sm" 
                     onClick={() => setFiltroModalOpen(false)}
-                    className="hover:bg-gray-100"
+                    className="hover:bg-muted"
                   >
                     ✕
                   </Button>
@@ -477,10 +543,10 @@ const Planejador = () => {
                 <div className="space-y-6">
                   {/* Filtro por Dia */}
                   <div>
-                    <div className="font-semibold mb-2 text-sm text-gray-900">Dias da semana:</div>
+                    <div className="font-semibold mb-2 text-sm text-foreground">Dias da semana:</div>
                     <div className="grid grid-cols-3 md:flex md:flex-wrap gap-2">
                       {diasSemana.map(dia => (
-                        <label key={dia} className="flex items-center gap-2 p-2 border rounded bg-white hover:bg-blue-50 transition-colors cursor-pointer">
+                        <label key={dia} className="flex items-center gap-2 p-2 border rounded bg-background hover:bg-muted transition-colors cursor-pointer border-border">
                           <input
                             type="checkbox"
                             checked={diasSelecionados.includes(dia)}
@@ -494,7 +560,7 @@ const Planejador = () => {
                         </label>
                       ))}
                     </div>
-                    <div className="font-semibold mt-3 mb-2 text-sm text-gray-900">Lógica para dias:</div>
+                    <div className="font-semibold mt-3 mb-2 text-sm text-foreground">Lógica para dias:</div>
                     <div className="space-y-2 md:flex md:gap-4">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -519,10 +585,10 @@ const Planejador = () => {
                   
                   {/* Filtro por Horário */}
                   <div>
-                    <h4 className="font-semibold mb-2 text-sm text-gray-900">Horários</h4>
+                    <h4 className="font-semibold mb-2 text-sm text-foreground">Horários</h4>
                     <div className="grid grid-cols-4 md:flex md:flex-wrap gap-1 md:gap-2 max-h-32 overflow-y-auto">
                       {horariosGrade.map(horario => (
-                        <label key={horario} className="flex items-center gap-1 p-1 md:p-2 border rounded text-xs md:text-sm bg-white hover:bg-blue-50 transition-colors cursor-pointer">
+                        <label key={horario} className="flex items-center gap-1 p-1 md:p-2 border rounded text-xs md:text-sm bg-background hover:bg-muted transition-colors cursor-pointer">
                           <input
                             type="checkbox"
                             checked={horariosSelecionados.includes(horario)}
@@ -537,7 +603,7 @@ const Planejador = () => {
                       ))}
                     </div>
                     
-                    <div className="font-semibold mt-3 mb-2 text-sm text-gray-900">Lógica para horários:</div>
+                    <div className="font-semibold mt-3 mb-2 text-sm text-foreground">Lógica para horários:</div>
                     <div className="space-y-2 md:flex md:gap-4">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -562,10 +628,10 @@ const Planejador = () => {
                   
                   {/* Restrições de Dias */}
                   <div>
-                    <div className="font-semibold mb-2 text-sm text-gray-900">Restrições de Dias (dias que NÃO quer):</div>
+                    <div className="font-semibold mb-2 text-sm text-foreground">Restrições de Dias (dias que NÃO quer):</div>
                     <div className="grid grid-cols-3 md:flex md:flex-wrap gap-2">
                       {diasSemana.map(dia => (
-                        <label key={dia} className="flex items-center gap-2 p-2 border rounded bg-white hover:bg-blue-50 transition-colors cursor-pointer">
+                        <label key={dia} className="flex items-center gap-2 p-2 border rounded bg-background hover:bg-muted transition-colors cursor-pointer">
                           <input
                             type="checkbox"
                             checked={diasRestritos.includes(dia)}
@@ -579,7 +645,7 @@ const Planejador = () => {
                         </label>
                       ))}
                     </div>
-                    <div className="font-semibold mt-3 mb-2 text-sm text-gray-900">Lógica para restrições de dias:</div>
+                    <div className="font-semibold mt-3 mb-2 text-sm text-foreground">Lógica para restrições de dias:</div>
                     <div className="space-y-2 md:flex md:gap-4">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -604,10 +670,10 @@ const Planejador = () => {
                   
                   {/* Restrições de Horário */}
                   <div>
-                    <div className="font-semibold mb-2 text-sm text-gray-900">Restrições de Horário (horários que NÃO quer):</div>
+                    <div className="font-semibold mb-2 text-sm text-foreground">Restrições de Horário (horários que NÃO quer):</div>
                     <div className="grid grid-cols-4 md:flex md:flex-wrap gap-1 md:gap-2 max-h-32 overflow-y-auto">
                       {horariosGrade.map(horario => (
-                        <label key={horario} className="flex items-center gap-1 p-1 md:p-2 border rounded text-xs md:text-sm bg-white hover:bg-blue-50 transition-colors cursor-pointer">
+                        <label key={horario} className="flex items-center gap-1 p-1 md:p-2 border rounded text-xs md:text-sm bg-background hover:bg-muted transition-colors cursor-pointer">
                           <input
                             type="checkbox"
                             checked={horariosRestritos.includes(horario)}
@@ -621,7 +687,7 @@ const Planejador = () => {
                         </label>
                       ))}
                     </div>
-                    <div className="font-semibold mt-3 mb-2 text-sm text-gray-900">Lógica para restrições de horário:</div>
+                    <div className="font-semibold mt-3 mb-2 text-sm text-foreground">Lógica para restrições de horário:</div>
                     <div className="space-y-2 md:flex md:gap-4">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -687,7 +753,21 @@ const Planejador = () => {
                 </div>
                 
                 <div className="space-y-6">
-                  <SectionsList courseCode={selectedCourse.code} />
+                  {isLoadingSections ? (
+                    <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                      <p className="text-sm text-muted-foreground">Carregando informações da disciplina...</p>
+                    </div>
+                  ) : (
+                    <SectionsList 
+                    courseCode={selectedCourse.code} 
+                    onCourseClick={handleShowSections}
+                    diasSelecionados={diasSelecionados}
+                    horariosSelecionados={horariosSelecionados}
+                    diasRestritos={diasRestritos}
+                    horariosRestritos={horariosRestritos}
+                  />
+                  )}
                 </div>
               </motion.div>
             </div>
@@ -726,19 +806,29 @@ function SectionDetailModal({
   // Buscar detalhes da disciplina
   const { data: courseDetail } = useCourseByCode(courseCode);
   
-  // Buscar todas as turmas desta disciplina (incluindo outras turmas)
+  // Buscar todas as turmas desta disciplina (incluindo de outros cursos)
   const { data: allSections = [] } = useCourseSections(courseCode);
+  const { data: allCourses = [] } = useCourses();
+  const courseFromIndex = allCourses.find(c => c.code === courseCode);
+  // Corrigir URL duplicada - se já contém o domínio completo, usar direto
+  const sectionsUrl = courseFromIndex?.sections_url || '';
+  const cleanSectionsUrl = sectionsUrl.includes('http') ? sectionsUrl.replace('https://FormigTeen.github.io/sigaa-static/api/v1/course/', '') : sectionsUrl;
+  const { data: allSectionsOfDiscipline = [] } = useCourseSections(cleanSectionsUrl);
   
-  // Filtrar outras turmas (excluindo a turma atual)
+  // Filtrar turmas de outros cursos (excluir as que já aparecem na lista principal)
+  const currentSectionIds = new Set(allSections.map(s => s.id_ref));
+  const otherCourseSections = allSectionsOfDiscipline.filter(s => !currentSectionIds.has(s.id_ref));
+  
+  // Filtrar outras turmas (excluindo a turma atual) - mantido para compatibilidade
   const otherSections = allSections.filter(s => s.id_ref !== section.id_ref);
   
   // Estados para controlar seções recolhíveis
   const [openPrereq, setOpenPrereq] = useState(false);
   const [openCoreq, setOpenCoreq] = useState(false);
   const [openOtherSections, setOpenOtherSections] = useState(false);
-  const [openCurrentSections, setOpenCurrentSections] = useState(true); // Aberto por padrão
+  const [openCurrentSections, setOpenCurrentSections] = useState(false); // Recolhido por padrão
   
-  const { getConflictsForSection, toggleSection } = useMySections();
+  const { getConflictsForSection, toggleSection, hasSection, getSectionForCourse } = useMySections();
   const { myPrograms } = useMyPrograms();
   const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
   
@@ -867,17 +957,17 @@ function SectionDetailModal({
           )}
           
           {/* Outras turmas */}
-          {otherSections.length > 0 && (
+          {otherCourseSections.length > 0 && (
             <div className="border rounded-lg p-4 bg-muted/30">
               <SectionHeader
-                title="Outras turmas"
-                count={otherSections.length}
+                title="Turmas ofertadas para outros cursos"
+                count={otherCourseSections.length}
                 open={openOtherSections}
                 onToggle={() => setOpenOtherSections(!openOtherSections)}
               />
               {openOtherSections && (
                 <div className="pt-4 space-y-3">
-                  {otherSections.map((s) => (
+                  {otherCourseSections.map((s) => (
                     <SectionCard key={s.id_ref} section={s} />
                   ))}
                 </div>
@@ -1050,7 +1140,7 @@ function SectionDetailModal({
 
 // Componente para exibir card de uma seção
 function SectionCard({ section, isCurrentSection = false }: { section: Section; isCurrentSection?: boolean }) {
-  const { toggleSection, hasSectionOnCourse, getConflictsForSection } = useMySections();
+  const { toggleSection, hasSectionOnCourse, getConflictsForSection, hasSection, getSectionForCourse } = useMySections();
   const { myPrograms } = useMyPrograms();
   const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
   
@@ -1062,9 +1152,11 @@ function SectionCard({ section, isCurrentSection = false }: { section: Section; 
   const seatsAccepted = (section as any)?.seats_accepted ?? 0;
   const seatsCount = (section as any)?.seats_count ?? 0;
   const progress = seatsCount > 0 ? Math.min(100, Math.max(0, Math.round((seatsAccepted / seatsCount) * 100))) : 0;
+  const isSelected = hasSection(section.id_ref);
+  const currentSection = getSectionForCourse(courseCode);
+  const isOtherSectionOfSameCourse = currentSection && currentSection.id_ref !== section.id_ref;
   const conflicts = getConflictsForSection(section);
   const hasConflict = conflicts.length > 0;
-  const isSelected = hasSectionOnCourse(courseCode);
   const horariosParsed = parseTimeCodes(timeCodes);
   
   return (
@@ -1081,6 +1173,11 @@ function SectionCard({ section, isCurrentSection = false }: { section: Section; 
             </Badge>
             {isCurrentSection && (
               <Badge variant="default" className="text-xs">Turma Atual</Badge>
+            )}
+            {isOtherSectionOfSameCourse && (
+              <Badge variant="secondary" className="text-xs">
+                Atual: {(currentSection as any)?.section_code || `Turma ${currentSection.id_ref}`}
+              </Badge>
             )}
             {hasConflict && (
               <Badge variant="destructive" className="text-xs">Conflito</Badge>
@@ -1100,7 +1197,7 @@ function SectionCard({ section, isCurrentSection = false }: { section: Section; 
             onClick={() => toggleSection(section)}
             className="text-xs"
           >
-            {isSelected ? 'Remover' : 'Adicionar'}
+            {isSelected ? 'Remover' : isOtherSectionOfSameCourse ? 'Substituir' : 'Adicionar'}
           </Button>
         )}
       </div>
@@ -1136,11 +1233,78 @@ function SectionCard({ section, isCurrentSection = false }: { section: Section; 
 }
 
 // Componente para listar as seções de uma disciplina
-function SectionsList({ courseCode }: { courseCode: string }) {
+function SectionsList({ 
+  courseCode, 
+  onCourseClick,
+  diasSelecionados,
+  horariosSelecionados,
+  diasRestritos,
+  horariosRestritos
+}: { 
+  courseCode: string; 
+  onCourseClick: (course: Course) => void;
+  diasSelecionados: string[];
+  horariosSelecionados: string[];
+  diasRestritos: string[];
+  horariosRestritos: string[];
+}) {
   const { data: sections = [], isLoading } = useCourseSections(courseCode);
-  const { toggleSection, hasSectionOnCourse, getConflictsForSection } = useMySections();
+  const { toggleSection, hasSectionOnCourse, getConflictsForSection, hasSection, getSectionForCourse } = useMySections();
   const { myPrograms } = useMyPrograms();
   const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
+  
+  // Filtrar turmas com base nos filtros de dias e horários
+  const filteredSections = useMemo(() => {
+    if (!sections.length) return sections;
+    
+    // Se não há filtros aplicados, retorna todas as seções
+    if (diasSelecionados.length === 0 && horariosSelecionados.length === 0 && 
+        diasRestritos.length === 0 && horariosRestritos.length === 0) {
+      return sections;
+    }
+    
+    return sections.filter(section => {
+      const timeCodes = Array.isArray(section.time_codes) ? section.time_codes : [];
+      if (timeCodes.length === 0) return true; // Se não tem horários definidos, inclui
+      
+      // Parse dos códigos de horário
+      const horariosParsed = parseTimeCodes(timeCodes);
+      
+      // Verificar filtros de dias selecionados
+      if (diasSelecionados.length > 0) {
+        const temDiaSelecionado = horariosParsed.some(h => 
+          diasSelecionados.includes(h.dia)
+        );
+        if (!temDiaSelecionado) return false;
+      }
+      
+      // Verificar filtros de horários selecionados
+      if (horariosSelecionados.length > 0) {
+        const temHorarioSelecionado = horariosParsed.some(h => 
+          horariosSelecionados.includes(`${h.horarioInicio}-${h.horarioFim}`)
+        );
+        if (!temHorarioSelecionado) return false;
+      }
+      
+      // Verificar restrições de dias
+      if (diasRestritos.length > 0) {
+        const temDiaRestrito = horariosParsed.some(h => 
+          diasRestritos.includes(h.dia)
+        );
+        if (temDiaRestrito) return false;
+      }
+      
+      // Verificar restrições de horários
+      if (horariosRestritos.length > 0) {
+        const temHorarioRestrito = horariosParsed.some(h => 
+          horariosRestritos.includes(`${h.horarioInicio}-${h.horarioFim}`)
+        );
+        if (temHorarioRestrito) return false;
+      }
+      
+      return true;
+    });
+  }, [sections, diasSelecionados, horariosSelecionados, diasRestritos, horariosRestritos]);
   
   // Buscar detalhes da disciplina para pré-requisitos e corequisitos
   const { data: courseDetail } = useCourseByCode(courseCode);
@@ -1246,10 +1410,10 @@ function SectionsList({ courseCode }: { courseCode: string }) {
     );
   }
 
-  if (sections.length === 0) {
+  if (filteredSections.length === 0) {
     return (
       <div className="text-center py-8">
-        <p className="text-muted-foreground">Nenhuma turma disponível para esta disciplina.</p>
+        <p className="text-muted-foreground">Nenhuma turma disponível para esta disciplina com os filtros aplicados.</p>
       </div>
     );
   }
@@ -1275,8 +1439,15 @@ function SectionsList({ courseCode }: { courseCode: string }) {
                   <div className="flex flex-wrap gap-2">
                     {prereqGroup.map((prereq, pIdx) => {
                       const normalized = normalizeCourse(prereq);
+                      const course = allCourses.find(c => c.code === normalized.code);
                       return (
-                        <Badge key={pIdx} variant="outline" className="text-xs">
+                        <Badge 
+                          key={pIdx} 
+                          variant="outline" 
+                          className="text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                          onClick={() => course && onCourseClick(course)}
+                          title={course ? `Ver detalhes de ${course.name}` : `Disciplina: ${normalized.code}`}
+                        >
                           {normalized.code} {normalized.name ? `- ${normalized.name}` : ''}
                         </Badge>
                       );
@@ -1303,7 +1474,12 @@ function SectionsList({ courseCode }: { courseCode: string }) {
               {unlockedCourses.map((course) => (
                 <div key={course.code} className="space-y-1">
                   <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline" className="text-xs">
+                    <Badge 
+                      variant="outline" 
+                      className="text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                      onClick={() => onCourseClick(course)}
+                      title={`Ver detalhes de ${course.name}`}
+                    >
                       {course.code} - {course.name}
                     </Badge>
                   </div>
@@ -1335,7 +1511,7 @@ function SectionsList({ courseCode }: { courseCode: string }) {
       
       {/* Lista de turmas disponíveis */}
       <div className="space-y-4">
-        {sections.map((section, index) => {
+        {filteredSections.map((section, index) => {
           const teachers = Array.isArray((section as any)?.teachers) 
             ? (section as any).teachers 
             : ((section as any)?.professor ? [(section as any).professor] : []);
@@ -1348,7 +1524,7 @@ function SectionsList({ courseCode }: { courseCode: string }) {
           const competition = getCompetitionLevel(seatsCount, seatsRequested, seatsRerequested);
           const compPhase1 = getPhase1Level(seatsCount, seatsRequested);
           const compPhase2 = getPhase2Level(seatsCount, seatsAccepted, seatsRerequested);
-          const isSelected = hasSectionOnCourse(courseCode);
+          const isSelected = hasSection(section.id_ref);
           const conflicts = getConflictsForSection(section);
           const hasConflict = conflicts.length > 0;
           const available = Math.max(0, seatsCount - seatsAccepted);
@@ -1361,6 +1537,9 @@ function SectionsList({ courseCode }: { courseCode: string }) {
           const reservedMine = getReservedUnfilledForTitles(section as any, myProgramTitles);
           const horariosParsed = parseTimeCodes(timeCodes);
 
+          const currentSection = getSectionForCourse(courseCode);
+          const isOtherSectionOfSameCourse = currentSection && currentSection.id_ref !== section.id_ref;
+          
           return (
             <div key={section.id_ref} className="border rounded-lg p-4 md:p-6 bg-muted/30">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
@@ -1374,6 +1553,11 @@ function SectionsList({ courseCode }: { courseCode: string }) {
                   {isSelected && (
                     <Badge variant="default" className="text-xs md:text-sm px-3 py-1">
                       Selecionada
+                    </Badge>
+                  )}
+                  {isOtherSectionOfSameCourse && (
+                    <Badge variant="secondary" className="text-xs md:text-sm px-3 py-1">
+                      Atual: {(currentSection as any)?.section_code || `Turma ${currentSection.id_ref}`}
                     </Badge>
                   )}
                   {hasConflict && (
@@ -1390,7 +1574,7 @@ function SectionsList({ courseCode }: { courseCode: string }) {
                   variant={isSelected ? "destructive" : "default"}
                 >
                   <Plus className="w-4 h-4 mr-1" />
-                  {isSelected ? 'Remover' : 'Adicionar'}
+                  {isSelected ? 'Remover' : isOtherSectionOfSameCourse ? 'Substituir' : 'Adicionar'}
                 </Button>
               </div>
 

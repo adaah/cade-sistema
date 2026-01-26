@@ -5,7 +5,7 @@ import { useMySections } from '@/hooks/useMySections';
 import { getSpplitedCode } from '@/lib/schedule';
 
 const days = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const hours = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+const hours = ['07:00', '07:55', '08:50', '09:45', '10:40', '11:35', '13:00', '13:55', '14:50', '15:45', '16:40', '17:35', '18:30', '19:25', '20:20', '21:15'];
 
 const dayMap: Record<string, string> = {
   '2': 'Seg',
@@ -67,10 +67,28 @@ export function MobileSchedule() {
       if (!match) continue;
       const [, dayNum, shift, slotStr] = match;
       const day = dayMap[dayNum];
-      const base = shift === 'M' ? 7 : shift === 'T' ? 13 : 18;
-      const slot = parseInt(slotStr, 10);
-      const startHour = base + (slot - 1);
-      const endHour = startHour + 1;
+      const slot = parseInt(slotStr, 10) - 1; // Convert para 0-based index
+      
+      // Mapeamento de horários conforme especificação
+      const horariosManha = ['07:00', '07:55', '08:50', '09:45', '10:40', '11:35'];
+      const horariosTarde = ['13:00', '13:55', '14:50', '15:45', '16:40', '17:35'];
+      const horariosNoite = ['18:30', '19:25', '20:20', '21:15'];
+      
+      let startTime: string;
+      let endTime: string;
+      
+      if (shift === 'M') {
+        startTime = horariosManha[slot];
+        endTime = slot < horariosManha.length - 1 ? horariosManha[slot + 1] : '12:00';
+      } else if (shift === 'T') {
+        startTime = horariosTarde[slot];
+        endTime = slot < horariosTarde.length - 1 ? horariosTarde[slot + 1] : '18:00';
+      } else if (shift === 'N') {
+        startTime = horariosNoite[slot];
+        endTime = slot < horariosNoite.length - 1 ? horariosNoite[slot + 1] : '22:00';
+      } else {
+        continue;
+      }
 
       scheduledItems.push({
         disciplineCode,
@@ -79,8 +97,8 @@ export function MobileSchedule() {
         professor,
         color: colorFor(disciplineCode),
         day,
-        startTime: `${startHour.toString().padStart(2, '0')}:00`,
-        endTime: `${endHour.toString().padStart(2, '0')}:00`,
+        startTime,
+        endTime,
       });
     }
   }
