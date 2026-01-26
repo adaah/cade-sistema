@@ -4,7 +4,7 @@ import { ScheduleGrid } from '@/components/planner/ScheduleGrid';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
 import { useApp } from '@/contexts/AppContext';
 import { Course, Section } from '@/services/api';
-import { Clock, Users, Plus, BadgeInfo, AlertTriangle, AlertCircle, Star, Flame, Trash2, BookOpen, GraduationCap, School, Filter, X, Calendar, CheckCircle } from 'lucide-react';
+import { Clock, Users, Plus, BadgeInfo, AlertTriangle, AlertCircle, Star, Flame, Trash2, BookOpen, GraduationCap, School, Filter, X, Calendar, CheckCircle, Eye, Search } from 'lucide-react';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
 import { cn, getReservedUnfilledBonus, getReservedUnfilledForTitles } from '@/lib/utils';
 import { useMyCourses } from "@/hooks/useMyCourses.ts";
@@ -12,12 +12,17 @@ import { useMySections } from '@/hooks/useMySections';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getCompetitionLevel, getPhase1Level, getPhase2Level } from '@/lib/competition';
-import { useCourseSections } from '@/hooks/useApi';
+import { useCourseSections, usePrograms, useProgramDetail, useCourseByCode } from '@/hooks/useApi';
 import { Button } from '@/components/ui/button';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { getSpplitedCode } from '@/lib/schedule';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useCourses } from '@/hooks/useApi';
+import { useQueries } from '@tanstack/react-query';
+import { fetchProgramDetail } from '@/services/api';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const diasSemana = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
 const mapSiglaParaNome = {
@@ -74,12 +79,115 @@ const parseTimeCodes = (timeCodes: string[]): Array<{ dia: string; horarioInicio
 
 const Planejador = () => {
   const { myPrograms } = useMyPrograms();
-  const { courses, isLoading: loadingCourses } = useMyCourses();
+  const { courses: myCourses, isLoading: loadingCourses } = useMyCourses();
   const [selectedDiscipline, setSelectedDiscipline] = useState<Course | null>(null);
   const [showSections, setShowSections] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  // Estado para curso selecionado para visualização
+  const [selectedViewProgramId, setSelectedViewProgramId] = useState<string | null>(null);
+  // Estado para busca de cursos no seletor
+  const [programSearchTerm, setProgramSearchTerm] = useState("");
+  
+  // Buscar todos os programas disponíveis
+  const { data: allPrograms = [] } = usePrograms();
+  
+  // Busca direta dos detalhes dos programas do usuário (fallback)
+  const userProgramDetails = useQueries({
+    queries: (myPrograms || []).map((p) => ({
+      queryKey: ['user-program-detail', p.detail_url] as const,
+      queryFn: () => p.detail_url ? fetchProgramDetail(p.detail_url) : Promise.resolve(null),
+      enabled: !!p.detail_url && (!myCourses || myCourses.length === 0),
+      staleTime: 1000 * 60 * 60,
+      gcTime: 1000 * 60 * 60 * 24,
+    })),
+  });
+  
+  // Carregar cursos do programa selecionado para visualização
+  const { data: viewProgramDetail } = useProgramDetail(
+    selectedViewProgramId 
+      ? allPrograms.find(p => p.id_ref === selectedViewProgramId)?.detail_url || null
+      : null
+  );
+  
+  const { data: coursesIndex = [] } = useCourses();
+  
+  // Cursos para exibição: se houver programa selecionado, usa os cursos dele, senão usa os cursos do usuário
+  const courses = useMemo(() => {
+    if (selectedViewProgramId && viewProgramDetail) {
+      const indexByCode = new Map(coursesIndex.map((c) => [c.code, c]));
+      const programCourses = (viewProgramDetail as any)?.courses || [];
+      
+      return programCourses.map((c: any) => {
+        const idx = indexByCode.get(c.code) as any;
+        return {
+          code: c.code,
+          name: idx?.name ?? c.name,
+          level: typeof c.semester === 'number' ? `Nível ${c.semester}` : (c.level ?? ''),
+          type: c.type,
+          credits: c.credits,
+          workload: c.workload,
+          prerequisites: c.prerequisites,
+          sections_count: idx?.sections_count ?? 0,
+          sections_url: idx?.sections_url,
+          detail_url: idx?.detail_url,
+          mode: idx?.mode,
+          location: idx?.location,
+          id_ref: idx?.id_ref,
+          department: idx?.department,
+          code_url: idx?.code_url,
+        } as Course;
+      });
+    }
+    
+    // Se não há programa selecionado ("Meu Curso"), usa os cursos do usuário
+    if (myCourses && myCourses.length > 0) {
+      return myCourses;
+    }
+    
+    // Se myCourses está vazio, tenta usar os detalhes dos programas do usuário
+    if (myPrograms && myPrograms.length > 0 && userProgramDetails.some(r => r.data)) {
+      const indexByCode = new Map(coursesIndex.map((c) => [c.code, c]));
+      const allUserCourses = userProgramDetails.flatMap((r) => {
+        const pd = r.data as any;
+        if (!pd?.courses) return [];
+        return pd.courses.map((c: any) => {
+          const idx = indexByCode.get(c.code) as any;
+          return {
+            code: c.code,
+            name: idx?.name ?? c.name,
+            level: typeof c.semester === 'number' ? `Nível ${c.semester}` : (c.level ?? ''),
+            type: c.type,
+            credits: c.credits,
+            workload: c.workload,
+            prerequisites: c.prerequisites,
+            sections_count: idx?.sections_count ?? 0,
+            sections_url: idx?.sections_url,
+            detail_url: idx?.detail_url,
+            mode: idx?.mode,
+            location: idx?.location,
+            id_ref: idx?.id_ref,
+            department: idx?.department,
+            code_url: idx?.code_url,
+          } as Course;
+        });
+      });
+      
+      // Remover duplicatas por código
+      const uniqueCourses = new Map();
+      allUserCourses.forEach(course => {
+        uniqueCourses.set(course.code, course);
+      });
+      
+      return Array.from(uniqueCourses.values());
+    }
+    
+    return [];
+  }, [selectedViewProgramId, viewProgramDetail, coursesIndex, myCourses, myPrograms, userProgramDetails]);
+  
+  const isLoading = loadingCourses || (selectedViewProgramId && !viewProgramDetail) || 
+    (!selectedViewProgramId && (!myCourses || myCourses.length === 0) && userProgramDetails.some(r => r.isLoading));
   const [filtroModalOpen, setFiltroModalOpen] = useState(false);
   const [diasSelecionados, setDiasSelecionados] = useState<string[]>([]);
   const [horariosSelecionados, setHorariosSelecionados] = useState<string[]>([]);
@@ -93,8 +201,6 @@ const Planejador = () => {
   
   const { hasSectionOnCourse, toggleSection, getConflictsForSection, mySections, clearSections } = useMySections();
   const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
-
-  const isLoading = loadingCourses;
 
   // Filtrar disciplinas por termo de busca e filtros
   const disciplinasFiltradas = useMemo(() => {
@@ -154,22 +260,73 @@ const Planejador = () => {
           <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
             Planejador de Grade
           </h1>
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p className="text-muted-foreground">
               Monte sua grade horária para o próximo semestre
             </p>
             {myPrograms.length > 0 && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-muted-foreground">Seu curso:</span>
                 {myPrograms.map((p) => (
                   <span
                     key={p.id_ref}
-                    className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted border border-border text-xs text-foreground"
+                    className="inline-flex items-center px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-medium"
                   >
                     {p.title}
                   </span>
                 ))}
               </div>
             )}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground flex items-center gap-1">
+                <Eye className="w-4 h-4" />
+                Visualizar ofertas de:
+              </span>
+              <Select 
+                value={selectedViewProgramId || "meu-curso"} 
+                onValueChange={(value) => setSelectedViewProgramId(value === "meu-curso" ? null : value)}
+              >
+                <SelectTrigger className="w-[250px] h-9">
+                  <SelectValue placeholder="Selecione um curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  <div className="p-2 border-b">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <input
+                        type="text"
+                        placeholder="Buscar curso..."
+                        value={programSearchTerm}
+                        onChange={(e) => setProgramSearchTerm(e.target.value)}
+                        className="w-full pl-8 pr-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+                  </div>
+                  <SelectItem value="meu-curso">
+                    Meu curso ({myPrograms.map(p => p.title).join(', ')})
+                  </SelectItem>
+                  {allPrograms
+                    .filter(p => !myPrograms.some(mp => mp.id_ref === p.id_ref))
+                    .filter(p => p.title.toLowerCase().includes(programSearchTerm.toLowerCase()))
+                    .map((program) => (
+                      <SelectItem key={program.id_ref} value={program.id_ref}>
+                        {program.title}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {selectedViewProgramId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedViewProgramId(null)}
+                  className="h-9"
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Voltar ao meu curso
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -179,7 +336,14 @@ const Planejador = () => {
             {/* Card de Disciplinas */}
             <div className="bg-card rounded-xl border border-border p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-card-foreground">Disciplinas do Curso</h3>
+                <div>
+                  <h3 className="font-semibold text-card-foreground">Disciplinas do Curso</h3>
+                  {selectedViewProgramId && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Visualizando: {allPrograms.find(p => p.id_ref === selectedViewProgramId)?.title || 'Outro curso'}
+                    </p>
+                  )}
+                </div>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground border border-border cursor-default">
                   {courses?.length || 0} disciplinas
                 </span>
@@ -205,25 +369,26 @@ const Planejador = () => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
-                {isLoading ? (
-                  [...Array(8)].map((_, i) => <SkeletonCard key={i} />)
-                ) : disciplinasFiltradas?.length === 0 ? (
-                  <div className="col-span-full text-center py-8">
-                    <p className="text-muted-foreground">Nenhuma disciplina encontrada</p>
-                    {searchTerm && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="mt-2"
-                        onClick={() => setSearchTerm('')}
-                      >
-                        Limpar busca
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  disciplinasFiltradas.map((course) => (
+              <div className="max-h-[600px] overflow-y-auto">
+                <div className="grid grid-cols-1 gap-3 md:gap-4">
+                  {isLoading ? (
+                    [...Array(8)].map((_, i) => <SkeletonCard key={i} />)
+                  ) : disciplinasFiltradas?.length === 0 ? (
+                    <div className="col-span-full text-center py-8">
+                      <p className="text-muted-foreground">Nenhuma disciplina encontrada</p>
+                      {searchTerm && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="mt-2"
+                          onClick={() => setSearchTerm('')}
+                        >
+                          Limpar busca
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    disciplinasFiltradas.map((course) => (
                     <div 
                       key={course.code}
                       onClick={() => handleShowSections(course)}
@@ -241,6 +406,7 @@ const Planejador = () => {
                     </div>
                   ))
                 )}
+              </div>
               </div>
             </div>
           </div>
@@ -296,7 +462,7 @@ const Planejador = () => {
                 <div className="flex items-center justify-between mb-4 border-b pb-2">
                   <div className="flex items-center gap-2">
                     <Filter className="w-5 h-5 text-blue-600" />
-                    <h3 className="text-lg font-bold text-gray-900">Filtro de matérias</h3>
+                    <h3 className="text-lg font-bold text-gray-900">Filtro de Disciplinas</h3>
                   </div>
                   <Button 
                     variant="ghost" 
@@ -530,189 +696,444 @@ const Planejador = () => {
 
         {/* Modal de Detalhes da Seção */}
         {selectedSection && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedSection(null)}>
-            <div className="bg-background rounded-lg p-4 w-full max-w-sm max-h-[85vh] overflow-y-auto md:max-w-2xl md:p-6" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-xl font-bold">
-                    {(selectedSection as any)?.course?.code || (selectedSection as any)?.course_code || 'N/A'}
-                  </h3>
-                  <p className="text-muted-foreground">
-                    {(selectedSection as any)?.course?.name || 'Nome não disponível'}
-                  </p>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedSection(null)}>✕</Button>
-              </div>
-              
-              <div className="space-y-6">
-                <div className="border rounded-lg p-4 md:p-6 bg-muted/30">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-                    <div className="flex gap-2 flex-wrap">
-                      <Badge variant="secondary" className="text-xs md:text-sm px-3 py-1">
-                        {(selectedSection as any)?.section_code || selectedSection.id_ref}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs md:text-sm px-3 py-1">
-                        {((selectedSection as any)?.seats_count ?? 0) === 0 
-                          ? 'Sem informação' 
-                          : `${(selectedSection as any)?.seats_count} vagas`}
-                      </Badge>
-                      {(() => {
-                        const conflicts = getConflictsForSection(selectedSection);
-                        if (conflicts.length > 0) {
-                          return (
-                            <Badge variant="destructive" className="text-xs md:text-sm px-3 py-1">
-                              Conflito de horário
-                            </Badge>
-                          );
-                        }
-                        return null;
-                      })()}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="mt-2 md:mt-0 px-4 py-2 text-xs md:text-sm flex items-center gap-2"
-                      onClick={() => {
-                        toggleSection(selectedSection);
-                        setSelectedSection(null);
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Remover da Grade
-                    </Button>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div className="space-y-2">
-                      <div>
-                        <span className="font-semibold text-muted-foreground">Docente:</span>
-                        <p className="mt-1">
-                          {Array.isArray((selectedSection as any)?.teachers) && (selectedSection as any).teachers.length > 0
-                            ? (selectedSection as any).teachers.join(', ')
-                            : ((selectedSection as any)?.professor || 'Professor(a) não definido')}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="font-semibold text-muted-foreground">Período:</span>
-                        <p className="mt-1">{(selectedSection as any)?.period || 'Não informado'}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div>
-                        <span className="font-semibold text-muted-foreground">Horários:</span>
-                        <p className="mt-1">
-                          {Array.isArray(selectedSection.time_codes) && selectedSection.time_codes.length > 0
-                            ? selectedSection.time_codes.join(', ')
-                            : 'Horário não definido'}
-                        </p>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {(() => {
-                            const timeCodes = Array.isArray(selectedSection.time_codes) ? selectedSection.time_codes : [];
-                            const horariosParsed = parseTimeCodes(timeCodes);
-                            if (horariosParsed.length > 0) {
-                              return horariosParsed.map((h, idx) => (
-                                <span key={idx} className="inline-block bg-blue-100 text-blue-800 rounded px-2 py-0.5 text-xs font-mono">
-                                  {h.dia} {h.horarioInicio} - {h.horarioFim}
-                                </span>
-                              ));
-                            }
-                            return (
-                              <span className="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded">Horário não informado</span>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Informações de vagas */}
-                  {((selectedSection as any)?.seats_count ?? 0) > 0 && (
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                        <span>
-                          Vagas: {(selectedSection as any)?.seats_accepted ?? 0}/{(selectedSection as any)?.seats_count ?? 0}
-                        </span>
-                        <span>
-                          {Math.round((((selectedSection as any)?.seats_accepted ?? 0) / ((selectedSection as any)?.seats_count ?? 1)) * 100)}% preenchido
-                        </span>
-                      </div>
-                      <Progress 
-                        value={Math.round((((selectedSection as any)?.seats_accepted ?? 0) / ((selectedSection as any)?.seats_count ?? 1)) * 100)} 
-                        className="h-2" 
-                      />
-                    </div>
-                  )}
-
-                  {/* Conflitos */}
-                  {(() => {
-                    const conflicts = getConflictsForSection(selectedSection);
-                    if (conflicts.length > 0) {
-                      // Agrupar conflitos por código de disciplina para evitar duplicatas
-                      const uniqueConflicts = conflicts.reduce((acc, conflict) => {
-                        const conflictSection = conflict.section;
-                        const conflictCode = (conflictSection as any)?.course?.code || (conflictSection as any)?.course_code || 'N/A';
-                        if (!acc.find(c => c.code === conflictCode)) {
-                          acc.push({
-                            code: conflictCode,
-                            name: (conflictSection as any)?.course?.name || 'Nome não disponível',
-                            section: conflictSection
-                          });
-                        }
-                        return acc;
-                      }, [] as Array<{ code: string; name: string; section: Section }>);
-
-                      return (
-                        <div className="mt-4 pt-4 border-t border-destructive/20">
-                          <div className="flex items-center gap-2 mb-3">
-                            <AlertTriangle className="w-5 h-5 text-destructive animate-pulse" />
-                            <span className="font-semibold text-destructive">Conflitos de horário detectados:</span>
-                          </div>
-                          <div className="space-y-2">
-                            {uniqueConflicts.map((conflict, idx) => {
-                              const conflictTimeCodes = Array.isArray(conflict.section.time_codes) ? conflict.section.time_codes : [];
-                              const conflictHorariosParsed = parseTimeCodes(conflictTimeCodes);
-                              
-                              return (
-                                <div key={idx} className="p-3 bg-destructive/10 border-2 border-destructive/50 shadow-destructive/10 rounded-lg flex gap-2 items-center">
-                                  <span className="flex items-center px-1 py-0.5 bg-destructive text-white text-xs rounded select-none"><AlertTriangle className="w-3 h-3 mr-1"/> Conflito</span>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="font-semibold text-destructive text-xs mb-0.5 truncate">
-                                      {conflict.code}
-                                    </div>
-                                    <div className="text-muted-foreground text-[10px] mb-1 truncate">
-                                      {conflict.name}
-                                    </div>
-                                    {conflictHorariosParsed.length > 0 && (
-                                      <div className="flex flex-wrap gap-1 mt-0.5">
-                                        {conflictHorariosParsed.map((h, hIdx) => (
-                                          <span key={hIdx} className="inline-block bg-destructive/20 text-destructive rounded px-2 py-0.5 text-xs font-mono border border-destructive/30">
-                                            {h.dia} {h.horarioInicio} - {h.horarioFim}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                          <p className="text-xs text-destructive mt-3 italic font-semibold flex gap-2 items-center">
-                            <AlertTriangle className="w-4 h-4" /> Há choque de horário com outra(s) turma(s) selecionada(s).
-                          </p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                </div>
-              </div>
-            </div>
-          </div>
+          <SectionDetailModal 
+            section={selectedSection}
+            onClose={() => setSelectedSection(null)}
+            onRemove={() => {
+              toggleSection(selectedSection);
+              setSelectedSection(null);
+            }}
+          />
         )}
       </div>
     </MainLayout>
   );
 };
+
+// Componente para o modal de detalhes da seção com informações da disciplina
+function SectionDetailModal({ 
+  section, 
+  onClose, 
+  onRemove 
+}: { 
+  section: Section; 
+  onClose: () => void;
+  onRemove: () => void;
+}) {
+  const courseCode = (section as any)?.course?.code || (section as any)?.course_code || '';
+  const courseName = (section as any)?.course?.name || 'Nome não disponível';
+  
+  // Buscar detalhes da disciplina
+  const { data: courseDetail } = useCourseByCode(courseCode);
+  
+  // Buscar todas as turmas desta disciplina (incluindo outras turmas)
+  const { data: allSections = [] } = useCourseSections(courseCode);
+  
+  // Filtrar outras turmas (excluindo a turma atual)
+  const otherSections = allSections.filter(s => s.id_ref !== section.id_ref);
+  
+  // Estados para controlar seções recolhíveis
+  const [openPrereq, setOpenPrereq] = useState(false);
+  const [openCoreq, setOpenCoreq] = useState(false);
+  const [openOtherSections, setOpenOtherSections] = useState(false);
+  const [openCurrentSections, setOpenCurrentSections] = useState(true); // Aberto por padrão
+  
+  const { getConflictsForSection, toggleSection } = useMySections();
+  const { myPrograms } = useMyPrograms();
+  const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
+  
+  // Componente para cabeçalho de seção recolhível
+  const SectionHeader = ({
+    title,
+    count,
+    open,
+    onToggle,
+  }: { title: string; count?: number; open: boolean; onToggle: () => void }) => (
+    <div className="flex items-center justify-between cursor-pointer" onClick={onToggle}>
+      <div className="flex items-center gap-2">
+        <h4 className="font-semibold text-sm text-card-foreground">{title}</h4>
+        {typeof count === 'number' && count > 0 && (
+          <Badge variant="secondary" className="px-2 py-0.5 text-xs">
+            {count}
+          </Badge>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+        className="px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted"
+        aria-label={open ? 'Recolher' : 'Expandir'}
+      >
+        {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-background rounded-lg p-4 w-full max-w-sm max-h-[85vh] overflow-y-auto md:max-w-2xl md:p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-xl font-bold">{courseCode}</h3>
+            <p className="text-muted-foreground">{courseName}</p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose}>✕</Button>
+        </div>
+        
+        <div className="space-y-6">
+          {/* Turmas ofertadas para o curso - ABERTO POR PADRÃO */}
+          <div className="border rounded-lg p-4 bg-muted/30">
+            <SectionHeader
+              title="Turmas ofertadas para o curso"
+              count={allSections.length}
+              open={openCurrentSections}
+              onToggle={() => setOpenCurrentSections(!openCurrentSections)}
+            />
+            {openCurrentSections && (
+              <div className="pt-4 space-y-3">
+                <SectionCard section={section} isCurrentSection />
+                {otherSections.length > 0 && (
+                  <>
+                    {otherSections.map((s) => (
+                      <SectionCard key={s.id_ref} section={s} />
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* Pré-requisitos */}
+          {courseDetail?.prerequisites && courseDetail.prerequisites.length > 0 && (
+            <div className="border rounded-lg p-4 bg-muted/30">
+              <SectionHeader
+                title="Pré-requisitos"
+                count={courseDetail.prerequisites.length}
+                open={openPrereq}
+                onToggle={() => setOpenPrereq(!openPrereq)}
+              />
+              {openPrereq && (
+                <div className="pt-4 space-y-2">
+                  {courseDetail.prerequisites.map((prereqGroup, idx) => (
+                    <div key={idx} className="space-y-1">
+                      {prereqGroup.length > 1 && (
+                        <p className="text-xs text-muted-foreground mb-1">Opção {idx + 1}:</p>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {prereqGroup.map((prereq: any, pIdx: number) => (
+                          <Badge key={pIdx} variant="outline" className="text-xs">
+                            {prereq.code} {prereq.name ? `- ${prereq.name}` : ''}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Disciplinas liberadas (corequisitos) */}
+          {courseDetail?.corequisites && courseDetail.corequisites.length > 0 && (
+            <div className="border rounded-lg p-4 bg-muted/30">
+              <SectionHeader
+                title="Disciplinas liberadas por ela"
+                count={courseDetail.corequisites.length}
+                open={openCoreq}
+                onToggle={() => setOpenCoreq(!openCoreq)}
+              />
+              {openCoreq && (
+                <div className="pt-4 space-y-2">
+                  {courseDetail.corequisites.map((coreqGroup, idx) => (
+                    <div key={idx} className="space-y-1">
+                      {coreqGroup.length > 1 && (
+                        <p className="text-xs text-muted-foreground mb-1">Opção {idx + 1}:</p>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {coreqGroup.map((coreq: any, cIdx: number) => (
+                          <Badge key={cIdx} variant="outline" className="text-xs">
+                            {coreq.code} {coreq.name ? `- ${coreq.name}` : ''}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Outras turmas */}
+          {otherSections.length > 0 && (
+            <div className="border rounded-lg p-4 bg-muted/30">
+              <SectionHeader
+                title="Outras turmas"
+                count={otherSections.length}
+                open={openOtherSections}
+                onToggle={() => setOpenOtherSections(!openOtherSections)}
+              />
+              {openOtherSections && (
+                <div className="pt-4 space-y-3">
+                  {otherSections.map((s) => (
+                    <SectionCard key={s.id_ref} section={s} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Informações da turma atual */}
+          <div className="border rounded-lg p-4 md:p-6 bg-muted/30">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+              <div className="flex gap-2 flex-wrap">
+                <Badge variant="secondary" className="text-xs md:text-sm px-3 py-1">
+                  {(section as any)?.section_code || section.id_ref}
+                </Badge>
+                <Badge variant="outline" className="text-xs md:text-sm px-3 py-1">
+                  {((section as any)?.seats_count ?? 0) === 0 
+                    ? 'Sem informação' 
+                    : `${(section as any)?.seats_count} vagas`}
+                </Badge>
+                {(() => {
+                  const conflicts = getConflictsForSection(section);
+                  if (conflicts.length > 0) {
+                    return (
+                      <Badge variant="destructive" className="text-xs md:text-sm px-3 py-1">
+                        Conflito de horário
+                      </Badge>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="mt-2 md:mt-0 px-4 py-2 text-xs md:text-sm flex items-center gap-2"
+                onClick={onRemove}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Remover da Grade
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <div>
+                  <span className="font-semibold text-muted-foreground">Docente:</span>
+                  <p className="mt-1">
+                    {Array.isArray((section as any)?.teachers) && (section as any).teachers.length > 0
+                      ? (section as any).teachers.join(', ')
+                      : ((section as any)?.professor || 'Professor(a) não definido')}
+                  </p>
+                </div>
+                <div>
+                  <span className="font-semibold text-muted-foreground">Período:</span>
+                  <p className="mt-1">{(section as any)?.period || 'Não informado'}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <span className="font-semibold text-muted-foreground">Horários:</span>
+                  <p className="mt-1">
+                    {Array.isArray(section.time_codes) && section.time_codes.length > 0
+                      ? section.time_codes.join(', ')
+                      : 'Horário não definido'}
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {(() => {
+                      const timeCodes = Array.isArray(section.time_codes) ? section.time_codes : [];
+                      const horariosParsed = parseTimeCodes(timeCodes);
+                      if (horariosParsed.length > 0) {
+                        return horariosParsed.map((h, idx) => (
+                          <span key={idx} className="inline-block bg-blue-100 text-blue-800 rounded px-2 py-0.5 text-xs font-mono">
+                            {h.dia} {h.horarioInicio} - {h.horarioFim}
+                          </span>
+                        ));
+                      }
+                      return (
+                        <span className="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded">Horário não informado</span>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Informações de vagas */}
+            {((section as any)?.seats_count ?? 0) > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                  <span>
+                    Vagas: {(section as any)?.seats_accepted ?? 0}/{(section as any)?.seats_count ?? 0}
+                  </span>
+                  <span>
+                    {Math.round((((section as any)?.seats_accepted ?? 0) / ((section as any)?.seats_count ?? 1)) * 100)}% preenchido
+                  </span>
+                </div>
+                <Progress 
+                  value={Math.round((((section as any)?.seats_accepted ?? 0) / ((section as any)?.seats_count ?? 1)) * 100)} 
+                  className="h-2" 
+                />
+              </div>
+            )}
+
+            {/* Conflitos */}
+            {(() => {
+              const conflicts = getConflictsForSection(section);
+              if (conflicts.length > 0) {
+                const uniqueConflicts = conflicts.reduce((acc, conflict) => {
+                  const conflictSection = conflict.section;
+                  const conflictCode = (conflictSection as any)?.course?.code || (conflictSection as any)?.course_code || 'N/A';
+                  if (!acc.find(c => c.code === conflictCode)) {
+                    acc.push({
+                      code: conflictCode,
+                      name: (conflictSection as any)?.course?.name || 'Nome não disponível',
+                      section: conflictSection
+                    });
+                  }
+                  return acc;
+                }, [] as Array<{ code: string; name: string; section: Section }>);
+
+                return (
+                  <div className="mt-4 pt-4 border-t border-destructive/20">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertTriangle className="w-5 h-5 text-destructive animate-pulse" />
+                      <span className="font-semibold text-destructive">Conflitos de horário detectados:</span>
+                    </div>
+                    <div className="space-y-2">
+                      {uniqueConflicts.map((conflict, idx) => {
+                        const conflictTimeCodes = Array.isArray(conflict.section.time_codes) ? conflict.section.time_codes : [];
+                        const conflictHorariosParsed = parseTimeCodes(conflictTimeCodes);
+                        
+                        return (
+                          <div key={idx} className="p-3 bg-destructive/10 border-2 border-destructive/50 shadow-destructive/10 rounded-lg flex gap-2 items-center">
+                            <span className="flex items-center px-1 py-0.5 bg-destructive text-white text-xs rounded select-none"><AlertTriangle className="w-3 h-3 mr-1"/> Conflito</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-destructive text-xs mb-0.5 truncate">
+                                {conflict.code}
+                              </div>
+                              <div className="text-muted-foreground text-[10px] mb-1 truncate">
+                                {conflict.name}
+                              </div>
+                              {conflictHorariosParsed.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                  {conflictHorariosParsed.map((h, hIdx) => (
+                                    <span key={hIdx} className="inline-block bg-destructive/20 text-destructive rounded px-2 py-0.5 text-xs font-mono border border-destructive/30">
+                                      {h.dia} {h.horarioInicio} - {h.horarioFim}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-destructive mt-3 italic font-semibold flex gap-2 items-center">
+                      <AlertTriangle className="w-4 h-4" /> Há choque de horário com outra(s) turma(s) selecionada(s).
+                    </p>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Componente para exibir card de uma seção
+function SectionCard({ section, isCurrentSection = false }: { section: Section; isCurrentSection?: boolean }) {
+  const { toggleSection, hasSectionOnCourse, getConflictsForSection } = useMySections();
+  const { myPrograms } = useMyPrograms();
+  const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
+  
+  const courseCode = (section as any)?.course?.code || (section as any)?.course_code || '';
+  const teachers = Array.isArray((section as any)?.teachers) 
+    ? (section as any).teachers 
+    : ((section as any)?.professor ? [(section as any).professor] : []);
+  const timeCodes = Array.isArray(section.time_codes) ? section.time_codes : [];
+  const seatsAccepted = (section as any)?.seats_accepted ?? 0;
+  const seatsCount = (section as any)?.seats_count ?? 0;
+  const progress = seatsCount > 0 ? Math.min(100, Math.max(0, Math.round((seatsAccepted / seatsCount) * 100))) : 0;
+  const conflicts = getConflictsForSection(section);
+  const hasConflict = conflicts.length > 0;
+  const isSelected = hasSectionOnCourse(courseCode);
+  const horariosParsed = parseTimeCodes(timeCodes);
+  
+  return (
+    <div className={cn(
+      "border rounded-lg p-3 bg-card",
+      isCurrentSection && "border-primary/50 bg-primary/5",
+      hasConflict && "border-destructive/50"
+    )}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <Badge variant="secondary" className="text-xs">
+              {(section as any)?.section_code || section.id_ref}
+            </Badge>
+            {isCurrentSection && (
+              <Badge variant="default" className="text-xs">Turma Atual</Badge>
+            )}
+            {hasConflict && (
+              <Badge variant="destructive" className="text-xs">Conflito</Badge>
+            )}
+            {isSelected && (
+              <Badge variant="outline" className="text-xs">Na Grade</Badge>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {teachers.length > 0 ? teachers.join(', ') : 'Professor(a) não definido'}
+          </div>
+        </div>
+        {!isCurrentSection && (
+          <Button
+            size="sm"
+            variant={isSelected ? "destructive" : "default"}
+            onClick={() => toggleSection(section)}
+            className="text-xs"
+          >
+            {isSelected ? 'Remover' : 'Adicionar'}
+          </Button>
+        )}
+      </div>
+      
+      <div className="space-y-2 text-xs">
+        <div>
+          <span className="font-semibold text-muted-foreground">Horários:</span>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {horariosParsed.length > 0 ? (
+              horariosParsed.map((h, idx) => (
+                <span key={idx} className="inline-block bg-blue-100 text-blue-800 rounded px-2 py-0.5 text-xs font-mono">
+                  {h.dia} {h.horarioInicio} - {h.horarioFim}
+                </span>
+              ))
+            ) : (
+              <span className="text-red-500 bg-red-50 px-2 py-0.5 rounded">Horário não informado</span>
+            )}
+          </div>
+        </div>
+        
+        {seatsCount > 0 && (
+          <div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+              <span>Vagas: {seatsAccepted}/{seatsCount}</span>
+              <span>{progress}%</span>
+            </div>
+            <Progress value={progress} className="h-1.5" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // Componente para listar as seções de uma disciplina
 function SectionsList({ courseCode }: { courseCode: string }) {
@@ -720,6 +1141,100 @@ function SectionsList({ courseCode }: { courseCode: string }) {
   const { toggleSection, hasSectionOnCourse, getConflictsForSection } = useMySections();
   const { myPrograms } = useMyPrograms();
   const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
+  
+  // Buscar detalhes da disciplina para pré-requisitos e corequisitos
+  const { data: courseDetail } = useCourseByCode(courseCode);
+  
+  // Buscar todas as disciplinas para encontrar as que são liberadas por esta
+  const { data: allCourses = [] } = useCourses();
+  
+  // Buscar todas as turmas da disciplina (incluindo de outros cursos)
+  const courseFromIndex = allCourses.find(c => c.code === courseCode);
+  // Corrigir URL duplicada - se já contém o domínio completo, usar direto
+  const sectionsUrl = courseFromIndex?.sections_url || '';
+  const cleanSectionsUrl = sectionsUrl.includes('http') ? sectionsUrl.replace('https://FormigTeen.github.io/sigaa-static/api/v1/course/', '') : sectionsUrl;
+  const { data: allSectionsOfDiscipline = [] } = useCourseSections(cleanSectionsUrl);
+  
+  // Filtrar turmas de outros cursos (excluir as que já aparecem na lista principal)
+  const currentSectionIds = new Set(sections.map(s => s.id_ref));
+  const otherCourseSections = allSectionsOfDiscipline.filter(s => !currentSectionIds.has(s.id_ref));
+  
+  // Função para normalizar cursos (SyncedCourse | NotSyncedCourse)
+  const normalizeCourse = (course: any) => {
+    if (typeof course === 'string') {
+      return { code: course, name: course };
+    }
+    return {
+      code: course.code || course,
+      name: course.name || course.code || course
+    };
+  };
+  
+  // Encontrar disciplinas liberadas (onde esta disciplina é pré-requisito)
+  const unlockedCoursesQueries = useQueries({
+    queries: allCourses.map(course => ({
+      queryKey: ['course-detail-for-unlocked', course.detail_url],
+      queryFn: () => course.detail_url ? fetchProgramDetail(course.detail_url) : Promise.resolve(null),
+      enabled: !!course.detail_url && course.code !== courseCode,
+      staleTime: 1000 * 60 * 60,
+      gcTime: 1000 * 60 * 60 * 24,
+    })),
+  });
+
+  const unlockedCourses = useMemo(() => {
+    if (!courseCode || !allCourses.length) return [];
+    
+    return allCourses.filter((course, index) => {
+      // Pular a própria disciplina
+      if (course.code === courseCode) return false;
+      
+      const courseDetail = unlockedCoursesQueries[index].data as any;
+      if (!courseDetail?.prerequisites) return false;
+      
+      // Verificar se esta disciplina está nos pré-requisitos deste curso
+      return courseDetail.prerequisites.some((prereqGroup: any[]) =>
+        prereqGroup.some((prereq: any) => {
+          const normalized = normalizeCourse(prereq);
+          return normalized.code === courseCode;
+        })
+      );
+    });
+  }, [courseCode, allCourses, unlockedCoursesQueries]);
+  
+  // Estados para controlar seções recolhíveis
+  const [openPrereq, setOpenPrereq] = useState(false);
+  const [openCoreq, setOpenCoreq] = useState(false);
+  const [openOtherSections, setOpenOtherSections] = useState(false);
+  
+  // Componente para cabeçalho de seção recolhível
+  const SectionHeader = ({
+    title,
+    count,
+    open,
+    onToggle,
+  }: { title: string; count?: number; open: boolean; onToggle: () => void }) => (
+    <div className="flex items-center justify-between cursor-pointer" onClick={onToggle}>
+      <div className="flex items-center gap-2">
+        <h4 className="font-semibold text-sm text-card-foreground">{title}</h4>
+        {typeof count === 'number' && count > 0 && (
+          <Badge variant="secondary" className="px-2 py-0.5 text-xs">
+            {count}
+          </Badge>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+        className="px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted"
+        aria-label={open ? 'Recolher' : 'Expandir'}
+      >
+        {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+    </div>
+  );
 
   if (isLoading) {
     return (
@@ -740,154 +1255,234 @@ function SectionsList({ courseCode }: { courseCode: string }) {
   }
 
   return (
-    <>
-      {sections.map((section, index) => {
-        const teachers = Array.isArray((section as any)?.teachers) 
-          ? (section as any).teachers 
-          : ((section as any)?.professor ? [(section as any).professor] : []);
-        const timeCodes = Array.isArray(section.time_codes) ? section.time_codes : [];
-        const seatsAccepted = (section as any)?.seats_accepted ?? 0;
-        const seatsCount = (section as any)?.seats_count ?? 0;
-        const progress = seatsCount > 0 ? Math.min(100, Math.max(0, Math.round((seatsAccepted / seatsCount) * 100))) : 0;
-        const seatsRequested = (section as any)?.seats_requested ?? 0;
-        const seatsRerequested = (section as any)?.seats_rerequested ?? 0;
-        const competition = getCompetitionLevel(seatsCount, seatsRequested, seatsRerequested);
-        const compPhase1 = getPhase1Level(seatsCount, seatsRequested);
-        const compPhase2 = getPhase2Level(seatsCount, seatsAccepted, seatsRerequested);
-        const isSelected = hasSectionOnCourse(courseCode);
-        const conflicts = getConflictsForSection(section);
-        const hasConflict = conflicts.length > 0;
-        const available = Math.max(0, seatsCount - seatsAccepted);
-        const isAlmostFull = available > 0 && available <= 5;
-        const hasExclusive = Array.isArray((section as any)?.spots_reserved) && 
-          ((section as any).spots_reserved as any[]).some((r: any) => {
-            const t = ((r as any)?.program?.title || '').trim().toLowerCase();
-            return t && myProgramTitles.has(t);
-          });
-        const reservedMine = getReservedUnfilledForTitles(section as any, myProgramTitles);
-        const horariosParsed = parseTimeCodes(timeCodes);
-
-        return (
-          <div key={section.id_ref} className="border rounded-lg p-4 md:p-6 bg-muted/30">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-              <div className="flex gap-2 flex-wrap">
-                <Badge variant="secondary" className="text-xs md:text-sm px-3 py-1">
-                  {section.code || `Turma ${section.id_ref}`}
-                </Badge>
-                <Badge variant="outline" className="text-xs md:text-sm px-3 py-1">
-                  {seatsCount === 0 ? 'Sem informação' : `${seatsCount} vagas`}
-                </Badge>
-                {isSelected && (
-                  <Badge variant="default" className="text-xs md:text-sm px-3 py-1">
-                    Selecionada
-                  </Badge>
-                )}
-                {hasConflict && (
-                  <Badge variant="destructive" className="text-xs md:text-sm px-3 py-1">
-                    Conflito
-                  </Badge>
-                )}
-              </div>
-              <Button
-                size="sm"
-                className="mt-2 md:mt-0 px-4 py-2 text-xs md:text-sm flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded shadow"
-                onClick={() => toggleSection(section)}
-                disabled={isSelected && hasConflict}
-                variant={isSelected ? "destructive" : "default"}
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                {isSelected ? 'Remover' : 'Adicionar'}
-              </Button>
+    <div className="space-y-6">
+      {/* Pré-requisitos */}
+      {courseDetail?.prerequisites && courseDetail.prerequisites.length > 0 && (
+        <div className="border rounded-lg p-4 bg-muted/30">
+          <SectionHeader
+            title="Pré-requisitos"
+            count={courseDetail.prerequisites.length}
+            open={openPrereq}
+            onToggle={() => setOpenPrereq(!openPrereq)}
+          />
+          {openPrereq && (
+            <div className="pt-4 space-y-2">
+              {courseDetail.prerequisites.map((prereqGroup, idx) => (
+                <div key={idx} className="space-y-1">
+                  {prereqGroup.length > 1 && (
+                    <p className="text-xs text-muted-foreground mb-1">Opção {idx + 1}:</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {prereqGroup.map((prereq, pIdx) => {
+                      const normalized = normalizeCourse(prereq);
+                      return (
+                        <Badge key={pIdx} variant="outline" className="text-xs">
+                          {normalized.code} {normalized.name ? `- ${normalized.name}` : ''}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
+          )}
+        </div>
+      )}
+      
+      {/* Disciplinas liberadas por esta disciplina */}
+      {unlockedCourses.length > 0 && (
+        <div className="border rounded-lg p-4 bg-muted/30">
+          <SectionHeader
+            title="Disciplinas liberadas por esta"
+            count={unlockedCourses.length}
+            open={openCoreq}
+            onToggle={() => setOpenCoreq(!openCoreq)}
+          />
+          {openCoreq && (
+            <div className="pt-4 space-y-2">
+              {unlockedCourses.map((course) => (
+                <div key={course.code} className="space-y-1">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {course.code} - {course.name}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Outras turmas de outros cursos */}
+      {otherCourseSections.length > 0 && (
+        <div className="border rounded-lg p-4 bg-muted/30">
+          <SectionHeader
+            title="Turmas ofertadas para outros cursos"
+            count={otherCourseSections.length}
+            open={openOtherSections}
+            onToggle={() => setOpenOtherSections(!openOtherSections)}
+          />
+          {openOtherSections && (
+            <div className="pt-4 space-y-3">
+              {otherCourseSections.map((s) => (
+                <SectionCard key={s.id_ref} section={s} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Lista de turmas disponíveis */}
+      <div className="space-y-4">
+        {sections.map((section, index) => {
+          const teachers = Array.isArray((section as any)?.teachers) 
+            ? (section as any).teachers 
+            : ((section as any)?.professor ? [(section as any).professor] : []);
+          const timeCodes = Array.isArray(section.time_codes) ? section.time_codes : [];
+          const seatsAccepted = (section as any)?.seats_accepted ?? 0;
+          const seatsCount = (section as any)?.seats_count ?? 0;
+          const progress = seatsCount > 0 ? Math.min(100, Math.max(0, Math.round((seatsAccepted / seatsCount) * 100))) : 0;
+          const seatsRequested = (section as any)?.seats_requested ?? 0;
+          const seatsRerequested = (section as any)?.seats_rerequested ?? 0;
+          const competition = getCompetitionLevel(seatsCount, seatsRequested, seatsRerequested);
+          const compPhase1 = getPhase1Level(seatsCount, seatsRequested);
+          const compPhase2 = getPhase2Level(seatsCount, seatsAccepted, seatsRerequested);
+          const isSelected = hasSectionOnCourse(courseCode);
+          const conflicts = getConflictsForSection(section);
+          const hasConflict = conflicts.length > 0;
+          const available = Math.max(0, seatsCount - seatsAccepted);
+          const isAlmostFull = available > 0 && available <= 5;
+          const hasExclusive = Array.isArray((section as any)?.spots_reserved) && 
+            ((section as any).spots_reserved as any[]).some((r: any) => {
+              const t = ((r as any)?.program?.title || '').trim().toLowerCase();
+              return t && myProgramTitles.has(t);
+            });
+          const reservedMine = getReservedUnfilledForTitles(section as any, myProgramTitles);
+          const horariosParsed = parseTimeCodes(timeCodes);
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="space-y-2">
-                <div>
-                  <span className="font-semibold text-muted-foreground">Docente:</span>
-                  <p className="mt-1">{teachers.length > 0 ? teachers.join(', ') : 'Professor(a) não definido'}</p>
+          return (
+            <div key={section.id_ref} className="border rounded-lg p-4 md:p-6 bg-muted/30">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                <div className="flex gap-2 flex-wrap">
+                  <Badge variant="secondary" className="text-xs md:text-sm px-3 py-1">
+                    {(section as any)?.section_code || `Turma ${section.id_ref}`}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs md:text-sm px-3 py-1">
+                    {seatsCount === 0 ? 'Sem informação' : `${seatsCount} vagas`}
+                  </Badge>
+                  {isSelected && (
+                    <Badge variant="default" className="text-xs md:text-sm px-3 py-1">
+                      Selecionada
+                    </Badge>
+                  )}
+                  {hasConflict && (
+                    <Badge variant="destructive" className="text-xs md:text-sm px-3 py-1">
+                      Conflito
+                    </Badge>
+                  )}
                 </div>
-                <div>
-                  <span className="font-semibold text-muted-foreground">Período:</span>
-                  <p className="mt-1">{(section as any)?.period || 'Não informado'}</p>
-                </div>
+                <Button
+                  size="sm"
+                  className="mt-2 md:mt-0 px-4 py-2 text-xs md:text-sm flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded shadow"
+                  onClick={() => toggleSection(section)}
+                  disabled={isSelected && hasConflict}
+                  variant={isSelected ? "destructive" : "default"}
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  {isSelected ? 'Remover' : 'Adicionar'}
+                </Button>
               </div>
-              <div className="space-y-2">
-                <div>
-                  <span className="font-semibold text-muted-foreground">Horários:</span>
-                  <p className="mt-1">{timeCodes.length > 0 ? timeCodes.join(', ') : 'Horário não definido'}</p>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {horariosParsed.length > 0 ? (
-                      horariosParsed.map((h, idx) => (
-                        <span key={idx} className="inline-block bg-blue-100 text-blue-800 rounded px-2 py-0.5 text-xs font-mono">
-                          {h.dia} {h.horarioInicio} - {h.horarioFim}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded">Horário não informado</span>
-                    )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div className="space-y-2">
+                  <div>
+                    <span className="font-semibold text-muted-foreground">Docente:</span>
+                    <p className="mt-1">{teachers.length > 0 ? teachers.join(', ') : 'Professor(a) não definido'}</p>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-muted-foreground">Período:</span>
+                    <p className="mt-1">{(section as any)?.period || 'Não informado'}</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <span className="font-semibold text-muted-foreground">Horários:</span>
+                    <p className="mt-1">{timeCodes.length > 0 ? timeCodes.join(', ') : 'Horário não definido'}</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {horariosParsed.length > 0 ? (
+                        horariosParsed.map((h, idx) => (
+                          <span key={idx} className="inline-block bg-blue-100 text-blue-800 rounded px-2 py-0.5 text-xs font-mono">
+                            {h.dia} {h.horarioInicio} - {h.horarioFim}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded">Horário não informado</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {seatsCount > 0 && (
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                  <span>Vagas: {seatsAccepted}/{seatsCount}</span>
-                  <span>{progress}% preenchido</span>
+              {seatsCount > 0 && (
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                    <span>Vagas: {seatsAccepted}/{seatsCount}</span>
+                    <span>{progress}% preenchido</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
                 </div>
-                <Progress value={progress} className="h-2" />
-              </div>
-            )}
+              )}
 
-            <div className="flex flex-wrap gap-1.5 mt-3">
-              {isAlmostFull && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-600/10 text-indigo-600 inline-flex items-center gap-1">
-                        <Flame className="w-3 h-3" /> Poucas Vagas
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Restam apenas {available} vagas disponíveis</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-              {hasExclusive && reservedMine > 0 && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary inline-flex items-center gap-1">
-                        <Star className="w-3 h-3" /> Reservado ({reservedMine})
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Vagas reservadas para seu(s) curso(s)</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-              {competition === 'high' && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-600/10 text-amber-600">
-                        Alta concorrência
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Muitos alunos interessados nesta turma</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {isAlmostFull && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-600/10 text-indigo-600 inline-flex items-center gap-1">
+                          <Flame className="w-3 h-3" /> Poucas Vagas
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Restam apenas {available} vagas disponíveis</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {hasExclusive && reservedMine > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary inline-flex items-center gap-1">
+                          <Star className="w-3 h-3" /> Reservado ({reservedMine})
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Vagas reservadas para seu(s) curso(s)</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {competition.level === 'alta' && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-600/10 text-amber-600">
+                          Alta concorrência
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Muitos alunos interessados nesta turma</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
-    </>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
