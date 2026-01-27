@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, memo, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ScheduleGrid } from '@/components/planner/ScheduleGrid';
 import { SkeletonCard } from '@/components/ui/skeleton-card';
@@ -98,6 +98,81 @@ const parseTimeCodes = (timeCodes: string[]): Array<{ dia: string; horarioInicio
   return horarios;
 };
 
+// Componente memoizado para card de disciplina - otimiza performance
+const DisciplineCard = memo(({ course, onClick }: { course: Course; onClick: (course: Course) => void }) => (
+  <div 
+    key={course.code}
+    onClick={() => onClick(course)}
+    className="p-3 md:p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+  >
+    <div className="font-semibold text-xs md:text-sm mb-1">{course.code}</div>
+    <div className="text-xs text-muted-foreground mb-2 line-clamp-2">
+      {course.name}
+    </div>
+    <div className="flex items-center gap-2">
+      <Badge variant="secondary" className="text-xs">
+        {course.sections_count} turma{course.sections_count !== 1 ? 's' : ''}
+      </Badge>
+    </div>
+  </div>
+));
+
+DisciplineCard.displayName = 'DisciplineCard';
+
+// Componente de lista virtualizada para melhor performance
+const VirtualizedDisciplineList = memo(({ 
+  courses, 
+  onLoadMore, 
+  hasMore,
+  onCourseClick 
+}: { 
+  courses: Course[]; 
+  onLoadMore: () => void; 
+  hasMore: boolean;
+  onCourseClick: (course: Course) => void;
+}) => {
+  const [visibleCount, setVisibleCount] = useState(20);
+  
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [courses]);
+  
+  const visibleCourses = courses.slice(0, visibleCount);
+  
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const element = e.currentTarget;
+    if (element.scrollHeight - element.scrollTop <= element.clientHeight + 100) {
+      if (hasMore && visibleCourses.length >= visibleCount - 5) {
+        setVisibleCount(prev => Math.min(prev + 20, courses.length));
+      }
+    }
+  };
+  
+  return (
+    <div 
+      className="space-y-3 max-h-[600px] overflow-y-auto"
+      onScroll={handleScroll}
+    >
+      {visibleCourses.map((course) => (
+        <DisciplineCard 
+          key={course.code}
+          course={course}
+          onClick={onCourseClick}
+        />
+      ))}
+      {hasMore && visibleCourses.length < courses.length && (
+        <div className="text-center py-2">
+          <Button variant="ghost" size="sm" onClick={() => setVisibleCount(prev => Math.min(prev + 20, courses.length))}>
+            Carregar mais
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+});
+
+VirtualizedDisciplineList.displayName = 'VirtualizedDisciplineList';
+
 const Planejador = () => {
   const { myPrograms } = useMyPrograms();
   const { courses: myCourses, isLoading: loadingCourses } = useMyCourses();
@@ -116,17 +191,6 @@ const Planejador = () => {
   // Buscar todos os programas disponíveis
   const { data: allPrograms = [] } = usePrograms();
   
-  // Busca direta dos detalhes dos programas do usuário (fallback)
-  const userProgramDetails = useQueries({
-    queries: (myPrograms || []).map((p) => ({
-      queryKey: ['user-program-detail', p.detail_url] as const,
-      queryFn: () => p.detail_url ? fetchProgramDetail(p.detail_url) : Promise.resolve(null),
-      enabled: !!p.detail_url && (!myCourses || myCourses.length === 0),
-      staleTime: 1000 * 60 * 60,
-      gcTime: 1000 * 60 * 60 * 24,
-    })),
-  });
-  
   // Carregar cursos do programa selecionado para visualização
   const { data: viewProgramDetail } = useProgramDetail(
     selectedViewProgramId 
@@ -136,8 +200,9 @@ const Planejador = () => {
   
   const { data: coursesIndex = [] } = useCourses();
   
-  // Cursos para exibição: se houver programa selecionado, usa os cursos dele, senão usa os cursos do usuário
+  // Cursos para exibição: simplificado e otimizado
   const courses = useMemo(() => {
+    // Se há programa selecionado, usa os cursos dele
     if (selectedViewProgramId && viewProgramDetail) {
       const indexByCode = new Map(coursesIndex.map((c) => [c.code, c]));
       const programCourses = (viewProgramDetail as any)?.courses || [];
@@ -169,48 +234,10 @@ const Planejador = () => {
       return myCourses;
     }
     
-    // Se myCourses está vazio, tenta usar os detalhes dos programas do usuário
-    if (myPrograms && myPrograms.length > 0 && userProgramDetails.some(r => r.data)) {
-      const indexByCode = new Map(coursesIndex.map((c) => [c.code, c]));
-      const allUserCourses = userProgramDetails.flatMap((r) => {
-        const pd = r.data as any;
-        if (!pd?.courses) return [];
-        return pd.courses.map((c: any) => {
-          const idx = indexByCode.get(c.code) as any;
-          return {
-            code: c.code,
-            name: idx?.name ?? c.name,
-            level: typeof c.semester === 'number' ? `Nível ${c.semester}` : (c.level ?? ''),
-            type: c.type,
-            credits: c.credits,
-            workload: c.workload,
-            prerequisites: c.prerequisites,
-            sections_count: idx?.sections_count ?? 0,
-            sections_url: idx?.sections_url,
-            detail_url: idx?.detail_url,
-            mode: idx?.mode,
-            location: idx?.location,
-            id_ref: idx?.id_ref,
-            department: idx?.department,
-            code_url: idx?.code_url,
-          } as Course;
-        });
-      });
-      
-      // Remover duplicatas por código
-      const uniqueCourses = new Map();
-      allUserCourses.forEach(course => {
-        uniqueCourses.set(course.code, course);
-      });
-      
-      return Array.from(uniqueCourses.values());
-    }
-    
     return [];
-  }, [selectedViewProgramId, viewProgramDetail, coursesIndex, myCourses, myPrograms, userProgramDetails]);
+  }, [selectedViewProgramId, viewProgramDetail, coursesIndex, myCourses]);
   
-  const isLoading = loadingCourses || (selectedViewProgramId && !viewProgramDetail) || 
-    (!selectedViewProgramId && (!myCourses || myCourses.length === 0) && userProgramDetails.some(r => r.isLoading));
+  const isLoading = loadingCourses || (selectedViewProgramId && !viewProgramDetail);
   const [filtroModalOpen, setFiltroModalOpen] = useState(false);
   const [diasSelecionados, setDiasSelecionados] = useState<string[]>([]);
   const [horariosSelecionados, setHorariosSelecionados] = useState<string[]>([]);
@@ -225,19 +252,16 @@ const Planejador = () => {
   const { hasSectionOnCourse, toggleSection, getConflictsForSection, mySections, clearSections } = useMySections();
   const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
 
-  // Filtrar disciplinas por termo de busca e filtros
+  // Filtrar disciplinas por termo de busca e filtros - otimizado
   const disciplinasFiltradas = useMemo(() => {
-    if (!courses) return [];
+    if (!courses || courses.length === 0) return [];
     
-    let result = [...courses];
+    let result = courses;
     
     // Filtrar disciplinas com 0 turmas
-    result = result.filter(course => {
-      const sectionsCount = course.sections_count || 0;
-      return sectionsCount > 0;
-    });
+    result = result.filter(course => (course.sections_count || 0) > 0);
     
-    // Aplicar filtro de busca
+    // Aplicar filtro de busca - otimizado com cache do termo
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(course => 
@@ -246,19 +270,8 @@ const Planejador = () => {
       );
     }
     
-    // Aplicar filtros de dias e horários
-    if (diasSelecionados.length > 0 || horariosSelecionados.length > 0 || 
-        diasRestritos.length > 0 || horariosRestritos.length > 0) {
-      result = result.filter(course => {
-        // Aqui precisaríamos verificar as turmas da disciplina
-        // Por enquanto, vamos manter a lógica simples e adicionar uma nota
-        // TODO: Implementar filtragem por dias/horários nas disciplinas
-        return true; // Temporariamente, todas as disciplinas passam
-      });
-    }
-    
     return result;
-  }, [courses, searchTerm, diasSelecionados, horariosSelecionados, diasRestritos, horariosRestritos]);
+  }, [courses, searchTerm]);
 
   // Calcular total de turmas ofertadas para o semestre
   const totalTurmasSemestre = useMemo(() => {
@@ -454,23 +467,12 @@ const Planejador = () => {
                       )}
                     </div>
                   ) : (
-                    disciplinasFiltradas.map((course) => (
-                    <div 
-                      key={course.code}
-                      onClick={() => handleShowSections(course)}
-                      className="p-3 md:p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="font-semibold text-xs md:text-sm mb-1">{course.code}</div>
-                      <div className="text-xs text-muted-foreground mb-2 line-clamp-2">
-                        {course.name}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">
-                          {course.sections_count} turma{course.sections_count !== 1 ? 's' : ''}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))
+                    <VirtualizedDisciplineList 
+                      courses={disciplinasFiltradas}
+                      onLoadMore={() => {}}
+                      hasMore={false}
+                      onCourseClick={handleShowSections}
+                    />
                 )}
               </div>
               </div>
@@ -807,20 +809,10 @@ function SectionDetailModal({
   // Buscar detalhes da disciplina
   const { data: courseDetail } = useCourseByCode(courseCode);
   
-  // Buscar todas as turmas desta disciplina (incluindo de outros cursos)
+  // Buscar todas as turmas desta disciplina - apenas uma chamada
   const { data: allSections = [] } = useCourseSections(courseCode);
-  const { data: allCourses = [] } = useCourses();
-  const courseFromIndex = allCourses.find(c => c.code === courseCode);
-  // Corrigir URL duplicada - se já contém o domínio completo, usar direto
-  const sectionsUrl = courseFromIndex?.sections_url || '';
-  const cleanSectionsUrl = sectionsUrl.includes('http') ? sectionsUrl.replace('https://FormigTeen.github.io/sigaa-static/api/v1/course/', '') : sectionsUrl;
-  const { data: allSectionsOfDiscipline = [] } = useCourseSections(cleanSectionsUrl);
   
-  // Filtrar turmas de outros cursos (excluir as que já aparecem na lista principal)
-  const currentSectionIds = new Set(allSections.map(s => s.id_ref));
-  const otherCourseSections = allSectionsOfDiscipline.filter(s => !currentSectionIds.has(s.id_ref));
-  
-  // Filtrar outras turmas (excluindo a turma atual) - mantido para compatibilidade
+  // Filtrar outras turmas (excluindo a turma atual)
   const otherSections = allSections.filter(s => s.id_ref !== section.id_ref);
   
   // Estados para controlar seções recolhíveis
@@ -958,17 +950,17 @@ function SectionDetailModal({
           )}
           
           {/* Outras turmas */}
-          {otherCourseSections.length > 0 && (
+          {otherSections.length > 0 && (
             <div className="border rounded-lg p-4 bg-muted/30">
               <SectionHeader
                 title="Turmas ofertadas para outros cursos"
-                count={otherCourseSections.length}
+                count={otherSections.length}
                 open={openOtherSections}
                 onToggle={() => setOpenOtherSections(!openOtherSections)}
               />
               {openOtherSections && (
                 <div className="pt-4 space-y-3">
-                  {otherCourseSections.map((s) => (
+                  {otherSections.map((s) => (
                     <SectionCard key={s.id_ref} section={s} />
                   ))}
                 </div>
@@ -1310,20 +1302,6 @@ function SectionsList({
   // Buscar detalhes da disciplina para pré-requisitos e corequisitos
   const { data: courseDetail } = useCourseByCode(courseCode);
   
-  // Buscar todas as disciplinas para encontrar as que são liberadas por esta
-  const { data: allCourses = [] } = useCourses();
-  
-  // Buscar todas as turmas da disciplina (incluindo de outros cursos)
-  const courseFromIndex = allCourses.find(c => c.code === courseCode);
-  // Corrigir URL duplicada - se já contém o domínio completo, usar direto
-  const sectionsUrl = courseFromIndex?.sections_url || '';
-  const cleanSectionsUrl = sectionsUrl.includes('http') ? sectionsUrl.replace('https://FormigTeen.github.io/sigaa-static/api/v1/course/', '') : sectionsUrl;
-  const { data: allSectionsOfDiscipline = [] } = useCourseSections(cleanSectionsUrl);
-  
-  // Filtrar turmas de outros cursos (excluir as que já aparecem na lista principal)
-  const currentSectionIds = new Set(sections.map(s => s.id_ref));
-  const otherCourseSections = allSectionsOfDiscipline.filter(s => !currentSectionIds.has(s.id_ref));
-  
   // Função para normalizar cursos (SyncedCourse | NotSyncedCourse)
   const normalizeCourse = (course: any) => {
     if (typeof course === 'string') {
@@ -1335,36 +1313,8 @@ function SectionsList({
     };
   };
   
-  // Encontrar disciplinas liberadas (onde esta disciplina é pré-requisito)
-  const unlockedCoursesQueries = useQueries({
-    queries: allCourses.map(course => ({
-      queryKey: ['course-detail-for-unlocked', course.detail_url],
-      queryFn: () => course.detail_url ? fetchProgramDetail(course.detail_url) : Promise.resolve(null),
-      enabled: !!course.detail_url && course.code !== courseCode,
-      staleTime: 1000 * 60 * 60,
-      gcTime: 1000 * 60 * 60 * 24,
-    })),
-  });
-
-  const unlockedCourses = useMemo(() => {
-    if (!courseCode || !allCourses.length) return [];
-    
-    return allCourses.filter((course, index) => {
-      // Pular a própria disciplina
-      if (course.code === courseCode) return false;
-      
-      const courseDetail = unlockedCoursesQueries[index].data as any;
-      if (!courseDetail?.prerequisites) return false;
-      
-      // Verificar se esta disciplina está nos pré-requisitos deste curso
-      return courseDetail.prerequisites.some((prereqGroup: any[]) =>
-        prereqGroup.some((prereq: any) => {
-          const normalized = normalizeCourse(prereq);
-          return normalized.code === courseCode;
-        })
-      );
-    });
-  }, [courseCode, allCourses, unlockedCoursesQueries]);
+  // Simplificado - não carregar disciplinas liberadas para melhorar performance
+  const unlockedCourses: any[] = [];
   
   // Estados para controlar seções recolhíveis
   const [openPrereq, setOpenPrereq] = useState(false);
@@ -1440,14 +1390,12 @@ function SectionsList({
                   <div className="flex flex-wrap gap-2">
                     {prereqGroup.map((prereq, pIdx) => {
                       const normalized = normalizeCourse(prereq);
-                      const course = allCourses.find(c => c.code === normalized.code);
                       return (
                         <Badge 
                           key={pIdx} 
                           variant="outline" 
-                          className="text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
-                          onClick={() => course && onCourseClick(course)}
-                          title={course ? `Ver detalhes de ${course.name}` : `Disciplina: ${normalized.code}`}
+                          className="text-xs"
+                          title={`Disciplina: ${normalized.code}`}
                         >
                           {normalized.code} {normalized.name ? `- ${normalized.name}` : ''}
                         </Badge>
@@ -1485,25 +1433,6 @@ function SectionsList({
                     </Badge>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      
-      {/* Outras turmas de outros cursos */}
-      {otherCourseSections.length > 0 && (
-        <div className="border rounded-lg p-4 bg-muted/30">
-          <SectionHeader
-            title="Turmas ofertadas para outros cursos"
-            count={otherCourseSections.length}
-            open={openOtherSections}
-            onToggle={() => setOpenOtherSections(!openOtherSections)}
-          />
-          {openOtherSections && (
-            <div className="pt-4 space-y-3">
-              {otherCourseSections.map((s) => (
-                <SectionCard key={s.id_ref} section={s} />
               ))}
             </div>
           )}
