@@ -17,8 +17,8 @@ export function AppSidebar() {
     <aside className="hidden md:flex flex-col w-64 min-h-screen bg-sidebar border-r border-sidebar-border">
       {/* Logo */}
       <div className="p-6">
-        <h1 className="text-2xl font-bold text-primary">CADE</h1>
-        <p className="text-xs text-muted-foreground mt-1">Portal Acadêmico UFBA</p>
+        <h1 className="text-2xl font-bold text-primary">CADEE</h1>
+        <p className="text-xs text-muted-foreground mt-1">Catálogo Auxiliar de Disciplinas e Estruturação de Estudos</p>
       </div>
 
       {/* Navigation */}

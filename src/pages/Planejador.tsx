@@ -517,13 +517,14 @@ const Planejador = () => {
         {/* Modal de Filtros */}
         <AnimatePresence>
           {filtroModalOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setFiltroModalOpen(false)}>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={handleCloseSections}>
               <motion.div 
-                className="bg-background rounded-lg p-4 w-full max-w-sm max-h-[85vh] overflow-y-auto md:max-w-lg md:p-6 shadow-lg border" 
+                className="bg-background rounded-lg p-4 w-full max-w-sm max-h-[75vh] overflow-y-auto md:max-w-lg md:p-6 shadow-lg border my-4" 
                 onClick={(e) => e.stopPropagation()}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 20 }}
+                transition={{ duration: 0.2 }}
               >
                 <div className="flex items-center justify-between mb-4 border-b pb-2 border-border">
                   <div className="flex items-center gap-2">
@@ -741,7 +742,7 @@ const Planejador = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 20 }}
-                className="bg-background rounded-lg p-4 w-full max-w-sm max-h-[85vh] overflow-y-auto md:max-w-2xl md:p-6 shadow border"
+                className="bg-background rounded-lg p-4 w-full max-w-sm max-h-[75vh] overflow-y-auto md:max-w-2xl md:p-6 shadow border my-4"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between mb-6">
@@ -864,7 +865,7 @@ function SectionDetailModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-background rounded-lg p-4 w-full max-w-sm max-h-[85vh] overflow-y-auto md:max-w-2xl md:p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-background rounded-lg p-4 w-full max-w-sm max-h-[75vh] overflow-y-auto md:max-w-2xl md:p-6 my-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
           <div>
             <h3 className="text-xl font-bold">{courseCode}</h3>

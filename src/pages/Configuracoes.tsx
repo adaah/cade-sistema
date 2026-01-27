@@ -51,7 +51,7 @@ const Configuracoes = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cade-configuracoes-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `cadee-configuracoes-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -117,7 +117,7 @@ const Configuracoes = () => {
               </div>
               <div>
                 <h3 className="font-semibold text-card-foreground">Modo de Uso</h3>
-                <p className="text-sm text-muted-foreground">Escolha como você quer usar o CADE</p>
+                <p className="text-sm text-muted-foreground">Escolha como você quer usar o CADEE</p>
               </div>
             </div>
 
@@ -296,7 +296,7 @@ const Configuracoes = () => {
 
           {/* Footer */}
           <div className="text-center text-sm text-muted-foreground pt-4">
-            <p>CADE - Portal Acadêmico UFBA</p>
+            <p>CADEE - Catálogo Auxiliar de Disciplinas e Estruturação de Estudos</p>
             <p className="mt-1">Desenvolvido com ❤️ para estudantes</p>
           </div>
         </div>

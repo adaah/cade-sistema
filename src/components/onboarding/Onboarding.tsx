@@ -275,10 +275,10 @@ export function Onboarding() {
           </div>
           <div className="leading-tight">
             <h1 className="text-lg font-bold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">
-              CADE
+              CADEE
             </h1>
             <p className="text-xs text-muted-foreground">
-              Portal Acadêmico UFBA
+              Catálogo Auxiliar de Disciplinas e Estruturação de Estudos
             </p>
           </div>
         </motion.div>
