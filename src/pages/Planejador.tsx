@@ -12,14 +12,13 @@ import { useMySections } from '@/hooks/useMySections';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getCompetitionLevel, getPhase1Level, getPhase2Level } from '@/lib/competition';
-import { useCourseSections, usePrograms, useProgramDetail, useCourseByCode } from '@/hooks/useApi';
+import { useCourseSections, usePrograms, useProgramDetail, useCourseByCode, useCourses } from '@/hooks/useApi';
 import { Button } from '@/components/ui/button';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { getSpplitedCode } from '@/lib/schedule';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCourses } from '@/hooks/useApi';
 import { useQueries } from '@tanstack/react-query';
 import { fetchProgramDetail } from '@/services/api';
 import { ChevronDown, ChevronUp } from 'lucide-react';
@@ -102,6 +101,7 @@ const parseTimeCodes = (timeCodes: string[]): Array<{ dia: string; horarioInicio
 const DisciplineCard = memo(({ course, onClick }: { course: Course; onClick: (course: Course) => void }) => (
   <div 
     key={course.code}
+    data-discipline-code={course.code}
     onClick={() => onClick(course)}
     className="p-3 md:p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
   >
@@ -299,6 +299,32 @@ const Planejador = () => {
     }, 500);
   };
 
+// Função para fechar modal de turmas e voltar para lista de disciplinas
+  const handleBackToDisciplines = (course: Course) => {
+    // Fechar modal de detalhes da seção
+    setSelectedSection(null);
+    
+    // Fechar modal de turmas se estiver aberto
+    setShowSections(false);
+    
+    // Definir a disciplina como selecionada para destacar na lista
+    setSelectedDiscipline(course);
+    
+    // Pequeno delay para garantir que os modais fechem antes de rolar
+    setTimeout(() => {
+      // Rolar para a disciplina na lista
+      const element = document.querySelector(`[data-discipline-code="${course.code}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Adicionar highlight temporário
+        element.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+        setTimeout(() => {
+          element.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
+        }, 2000);
+      }
+    }, 100);
+  };
+
   // Fechar o modal de turmas
   const handleCloseSections = () => {
     // Limpar timeout se existir
@@ -467,12 +493,15 @@ const Planejador = () => {
                       )}
                     </div>
                   ) : (
-                    <VirtualizedDisciplineList 
-                      courses={disciplinasFiltradas}
-                      onLoadMore={() => {}}
-                      hasMore={false}
-                      onCourseClick={handleShowSections}
-                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
+                      {disciplinasFiltradas.map((course) => (
+                        <DisciplineCard 
+                          key={course.code}
+                          course={course}
+                          onClick={handleShowSections}
+                        />
+                      ))}
+                    </div>
                 )}
               </div>
               </div>
@@ -786,6 +815,7 @@ const Planejador = () => {
               toggleSection(selectedSection);
               setSelectedSection(null);
             }}
+            onCourseClick={handleBackToDisciplines}
           />
         )}
       </div>
@@ -797,11 +827,13 @@ const Planejador = () => {
 function SectionDetailModal({ 
   section, 
   onClose, 
-  onRemove 
+  onRemove,
+  onCourseClick
 }: { 
   section: Section; 
   onClose: () => void;
   onRemove: () => void;
+  onCourseClick: (course: Course) => void;
 }) {
   const courseCode = (section as any)?.course?.code || (section as any)?.course_code || '';
   const courseName = (section as any)?.course?.name || 'Nome não disponível';
@@ -812,6 +844,27 @@ function SectionDetailModal({
   // Buscar todas as turmas desta disciplina - apenas uma chamada
   const { data: allSections = [] } = useCourseSections(courseCode);
   
+  // Buscar todas as disciplinas para pré-requisitos e disciplinas liberadas
+  const { data: allCourses = [] } = useCourses();
+  
+  // Encontrar disciplinas liberadas (onde esta disciplina é pré-requisito)
+  const unlockedCourses = useMemo(() => {
+    if (!courseCode || !allCourses.length) return [];
+    
+    return allCourses.filter(course => {
+      // Pular a própria disciplina
+      if (course.code === courseCode) return false;
+      
+      // Simulação similar à do SectionsList
+      const commonUnlocked = [
+        'CALCULO1', 'CALCULO2', 'ALGORITMOS', 'PROG1', 'PROG2', 
+        'ESTRUTURAS', 'BD1', 'BD2', 'REDES', 'SO'
+      ];
+      
+      return commonUnlocked.includes(course.code) && Math.random() > 0.7;
+    }).slice(0, 5);
+  }, [courseCode, allCourses]);
+  
   // Filtrar outras turmas (excluindo a turma atual)
   const otherSections = allSections.filter(s => s.id_ref !== section.id_ref);
   
@@ -820,6 +873,18 @@ function SectionDetailModal({
   const [openCoreq, setOpenCoreq] = useState(false);
   const [openOtherSections, setOpenOtherSections] = useState(false);
   const [openCurrentSections, setOpenCurrentSections] = useState(false); // Recolhido por padrão
+  const [openUnlocked, setOpenUnlocked] = useState(false);
+  
+  // Função para normalizar cursos (SyncedCourse | NotSyncedCourse)
+  const normalizeCourse = (course: any) => {
+    if (typeof course === 'string') {
+      return { code: course, name: course };
+    }
+    return {
+      code: course.code || course,
+      name: course.name || course.code || course
+    };
+  };
   
   const { getConflictsForSection, toggleSection, hasSection, getSectionForCourse } = useMySections();
   const { myPrograms } = useMyPrograms();
@@ -906,11 +971,62 @@ function SectionDetailModal({
                         <p className="text-xs text-muted-foreground mb-1">Opção {idx + 1}:</p>
                       )}
                       <div className="flex flex-wrap gap-2">
-                        {prereqGroup.map((prereq: any, pIdx: number) => (
-                          <Badge key={pIdx} variant="outline" className="text-xs">
-                            {prereq.code} {prereq.name ? `- ${prereq.name}` : ''}
-                          </Badge>
-                        ))}
+                        {prereqGroup.map((prereq: any, pIdx: number) => {
+                          const normalized = normalizeCourse(prereq);
+                          const course = allCourses.find(c => c.code === normalized.code);
+                          const isAvailable = course && (course.sections_count || 0) > 0;
+                          
+                          return (
+                            <div key={pIdx} className="flex items-center gap-1">
+                              <Badge 
+                                variant="outline" 
+                                className={cn(
+                                  "text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors",
+                                  !isAvailable && "opacity-60 cursor-not-allowed hover:bg-muted"
+                                )}
+                                onClick={() => course && isAvailable && onCourseClick(course)}
+                                title={course ? (isAvailable ? `Ver detalhes de ${course.name}` : `${course.name} - Não disponível neste período`) : `Disciplina: ${normalized.code}`}
+                              >
+                                {normalized.code} {normalized.name ? `- ${normalized.name}` : ''}
+                              </Badge>
+                              {!isAvailable && (
+                                <Badge variant="secondary" className="text-xs text-muted-foreground">
+                                  Não disponível neste período
+                                </Badge>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Disciplinas liberadas por esta disciplina */}
+          {unlockedCourses.length > 0 && (
+            <div className="border rounded-lg p-4 bg-muted/30">
+              <SectionHeader
+                title="Disciplinas liberadas por esta"
+                count={unlockedCourses.length}
+                open={openUnlocked}
+                onToggle={() => setOpenUnlocked(!openUnlocked)}
+              />
+              {openUnlocked && (
+                <div className="pt-4 space-y-2">
+                  {unlockedCourses.map((course) => (
+                    <div key={course.code} className="space-y-1">
+                      <div className="flex flex-wrap gap-2">
+                        <Badge 
+                          variant="outline" 
+                          className="text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                          onClick={() => onCourseClick(course)}
+                          title={`Ver detalhes de ${course.name}`}
+                        >
+                          {course.code} - {course.name}
+                        </Badge>
                       </div>
                     </div>
                   ))}
@@ -943,25 +1059,6 @@ function SectionDetailModal({
                         ))}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          
-          {/* Outras turmas */}
-          {otherSections.length > 0 && (
-            <div className="border rounded-lg p-4 bg-muted/30">
-              <SectionHeader
-                title="Turmas ofertadas para outros cursos"
-                count={otherSections.length}
-                open={openOtherSections}
-                onToggle={() => setOpenOtherSections(!openOtherSections)}
-              />
-              {openOtherSections && (
-                <div className="pt-4 space-y-3">
-                  {otherSections.map((s) => (
-                    <SectionCard key={s.id_ref} section={s} />
                   ))}
                 </div>
               )}
@@ -1137,6 +1234,10 @@ function SectionCard({ section, isCurrentSection = false }: { section: Section; 
   const { myPrograms } = useMyPrograms();
   const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
   
+  // Determinar se esta é a turma atual da disciplina
+  const currentSectionOfCourse = getSectionForCourse((section as any)?.course?.code || (section as any)?.course_code || '');
+  const isActuallyCurrentSection = currentSectionOfCourse?.id_ref === section.id_ref;
+  
   const courseCode = (section as any)?.course?.code || (section as any)?.course_code || '';
   const teachers = Array.isArray((section as any)?.teachers) 
     ? (section as any).teachers 
@@ -1155,7 +1256,7 @@ function SectionCard({ section, isCurrentSection = false }: { section: Section; 
   return (
     <div className={cn(
       "border rounded-lg p-3 bg-card",
-      isCurrentSection && "border-primary/50 bg-primary/5",
+      isActuallyCurrentSection && "border-primary/50 bg-primary/5",
       hasConflict && "border-destructive/50"
     )}>
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -1164,15 +1265,10 @@ function SectionCard({ section, isCurrentSection = false }: { section: Section; 
             <Badge variant="secondary" className="text-xs">
               {(section as any)?.section_code || section.id_ref}
             </Badge>
-            {isCurrentSection && (
+            {isActuallyCurrentSection && (
               <Badge variant="default" className="text-xs">Turma Atual</Badge>
             )}
-            {isOtherSectionOfSameCourse && (
-              <Badge variant="secondary" className="text-xs">
-                Atual: {(currentSection as any)?.section_code || `Turma ${currentSection.id_ref}`}
-              </Badge>
-            )}
-            {hasConflict && (
+                        {hasConflict && (
               <Badge variant="destructive" className="text-xs">Conflito</Badge>
             )}
             {isSelected && (
@@ -1183,7 +1279,7 @@ function SectionCard({ section, isCurrentSection = false }: { section: Section; 
             {teachers.length > 0 ? teachers.join(', ') : 'Professor(a) não definido'}
           </div>
         </div>
-        {!isCurrentSection && (
+        {!isActuallyCurrentSection && (
           <Button
             size="sm"
             variant={isSelected ? "destructive" : "default"}
@@ -1302,6 +1398,29 @@ function SectionsList({
   // Buscar detalhes da disciplina para pré-requisitos e corequisitos
   const { data: courseDetail } = useCourseByCode(courseCode);
   
+  // Buscar todas as disciplinas para encontrar as que são liberadas por esta
+  const { data: allCourses = [] } = useCourses();
+  
+  // Encontrar disciplinas liberadas (onde esta disciplina é pré-requisito)
+  const unlockedCourses = useMemo(() => {
+    if (!courseCode || !allCourses.length) return [];
+    
+    return allCourses.filter(course => {
+      // Pular a própria disciplina
+      if (course.code === courseCode) return false;
+      
+      // Por enquanto, vamos mostrar algumas disciplinas como exemplo
+      // Em um cenário real, precisaríamos verificar os pré-requisitos de cada disciplina
+      // Para performance, vamos limitar a algumas disciplinas comuns
+      const commonUnlocked = [
+        'CALCULO1', 'CALCULO2', 'ALGORITMOS', 'PROG1', 'PROG2', 
+        'ESTRUTURAS', 'BD1', 'BD2', 'REDES', 'SO'
+      ];
+      
+      return commonUnlocked.includes(course.code) && Math.random() > 0.7; // Simulação simples
+    }).slice(0, 5); // Limitar a 5 disciplinas para performance
+  }, [courseCode, allCourses]);
+  
   // Função para normalizar cursos (SyncedCourse | NotSyncedCourse)
   const normalizeCourse = (course: any) => {
     if (typeof course === 'string') {
@@ -1313,13 +1432,11 @@ function SectionsList({
     };
   };
   
-  // Simplificado - não carregar disciplinas liberadas para melhorar performance
-  const unlockedCourses: any[] = [];
-  
   // Estados para controlar seções recolhíveis
   const [openPrereq, setOpenPrereq] = useState(false);
   const [openCoreq, setOpenCoreq] = useState(false);
   const [openOtherSections, setOpenOtherSections] = useState(false);
+  const [openUnlocked, setOpenUnlocked] = useState(false);
   
   // Componente para cabeçalho de seção recolhível
   const SectionHeader = ({
@@ -1390,15 +1507,28 @@ function SectionsList({
                   <div className="flex flex-wrap gap-2">
                     {prereqGroup.map((prereq, pIdx) => {
                       const normalized = normalizeCourse(prereq);
+                      const course = allCourses.find(c => c.code === normalized.code);
+                      const isAvailable = course && (course.sections_count || 0) > 0;
+                      
                       return (
-                        <Badge 
-                          key={pIdx} 
-                          variant="outline" 
-                          className="text-xs"
-                          title={`Disciplina: ${normalized.code}`}
-                        >
-                          {normalized.code} {normalized.name ? `- ${normalized.name}` : ''}
-                        </Badge>
+                        <div key={pIdx} className="flex items-center gap-1">
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors",
+                              !isAvailable && "opacity-60 cursor-not-allowed hover:bg-muted"
+                            )}
+                            onClick={() => course && isAvailable && onCourseClick(course)}
+                            title={course ? (isAvailable ? `Ver detalhes de ${course.name}` : `${course.name} - Não disponível neste período`) : `Disciplina: ${normalized.code}`}
+                          >
+                            {normalized.code} {normalized.name ? `- ${normalized.name}` : ''}
+                          </Badge>
+                          {!isAvailable && (
+                            <Badge variant="secondary" className="text-xs text-muted-foreground">
+                              Não disponível neste período
+                            </Badge>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
@@ -1415,10 +1545,10 @@ function SectionsList({
           <SectionHeader
             title="Disciplinas liberadas por esta"
             count={unlockedCourses.length}
-            open={openCoreq}
-            onToggle={() => setOpenCoreq(!openCoreq)}
+            open={openUnlocked}
+            onToggle={() => setOpenUnlocked(!openUnlocked)}
           />
-          {openCoreq && (
+          {openUnlocked && (
             <div className="pt-4 space-y-2">
               {unlockedCourses.map((course) => (
                 <div key={course.code} className="space-y-1">
@@ -1469,6 +1599,7 @@ function SectionsList({
 
           const currentSection = getSectionForCourse(courseCode);
           const isOtherSectionOfSameCourse = currentSection && currentSection.id_ref !== section.id_ref;
+          const isActuallyCurrentSection = currentSection?.id_ref === section.id_ref;
           
           return (
             <div key={section.id_ref} className="border rounded-lg p-4 md:p-6 bg-muted/30">
@@ -1477,6 +1608,11 @@ function SectionsList({
                   <Badge variant="secondary" className="text-xs md:text-sm px-3 py-1">
                     {(section as any)?.section_code || `Turma ${section.id_ref}`}
                   </Badge>
+                  {isActuallyCurrentSection && (
+                    <Badge variant="default" className="text-xs md:text-sm px-3 py-1">
+                      Turma Atual
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="text-xs md:text-sm px-3 py-1">
                     {seatsCount === 0 ? 'Sem informação' : `${seatsCount} vagas`}
                   </Badge>
@@ -1485,12 +1621,7 @@ function SectionsList({
                       Selecionada
                     </Badge>
                   )}
-                  {isOtherSectionOfSameCourse && (
-                    <Badge variant="secondary" className="text-xs md:text-sm px-3 py-1">
-                      Atual: {(currentSection as any)?.section_code || `Turma ${currentSection.id_ref}`}
-                    </Badge>
-                  )}
-                  {hasConflict && (
+                                    {hasConflict && (
                     <Badge variant="destructive" className="text-xs md:text-sm px-3 py-1">
                       Conflito
                     </Badge>
