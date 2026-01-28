@@ -37,6 +37,7 @@ const Disciplinas = () => {
   const [selectedDiscipline, setSelectedDiscipline] = useState<Course | null>(null);
   const [showDisciplinesModal, setShowDisciplinesModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showBlockedModal, setShowBlockedModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ type: 'completed' | 'favorite' | 'import'; course?: Course; codes?: string[] } | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
@@ -53,6 +54,12 @@ const Disciplinas = () => {
   }, []);
 
   const handleRestrictedAction = (type: 'completed' | 'favorite', course: Course) => {
+    if (type === 'completed' && !hasAllPrereqsDone(course)) {
+      setPendingAction({ type, course });
+      setShowBlockedModal(true);
+      return;
+    }
+
     if (isSimplified) {
       setPendingAction({ type, course });
       setShowUpgradeModal(true);
@@ -81,6 +88,52 @@ const Disciplinas = () => {
       }
       setPendingAction(null);
     }
+  };
+
+  const getPrerequisitesList = (course: Course): string[] => {
+    let prereqs = getPrereqCodes(course);
+
+    // cache from detalhes já buscados
+    if (prereqs.length === 0) {
+      const cached = prereqCache.get(course.code);
+      if (cached && cached.length > 0) {
+        prereqs = cached;
+      }
+    }
+
+    // fallback: índice global
+    if (prereqs.length === 0) {
+      const fallback = allCoursesByCode.get(course.code);
+      if (fallback) {
+        const fbCodes = getPrereqCodes(fallback as any);
+        if (fbCodes.length > 0) prereqs = fbCodes;
+      }
+    }
+
+    return prereqs;
+  };
+
+  const markPrereqsAsCompleted = () => {
+    if (pendingAction?.course) {
+      const prereqs = getPrerequisitesList(pendingAction.course);
+      prereqs.forEach(code => {
+        if (!completedDisciplines.includes(code)) {
+          toggleCompletedDiscipline(code);
+        }
+      });
+      // Marca a disciplina atual também
+      toggleCompletedDiscipline(pendingAction.course.code);
+    }
+    setShowBlockedModal(false);
+    setPendingAction(null);
+  };
+
+  const markOnlyCurrentAsCompleted = () => {
+    if (pendingAction?.course) {
+      toggleCompletedDiscipline(pendingAction.course.code);
+    }
+    setShowBlockedModal(false);
+    setPendingAction(null);
   };
 
   const codeRegex = /[A-Z]{3,}\d{2,}[A-Z]?/g;
@@ -360,33 +413,46 @@ const Disciplinas = () => {
         <div className="mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h1 className="text-2xl font-bold text-foreground">Catálogo de Disciplinas</h1>
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted"
-            >
-              <Upload className="w-4 h-4" />
-              Importar histórico
-            </button>
           </div>
-          {myPrograms.length > 0 ? (
-            <div className="flex flex-wrap gap-2 mt-2">
-              {myPrograms.map((p) => (
-                <span
-                  key={p.id_ref}
-                  className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted border border-border text-xs text-foreground"
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-2">
+            {myPrograms.length > 0 ? (
+              <div className="flex flex-wrap gap-2 items-center justify-between w-full">
+                <div className="flex flex-wrap gap-2 items-center">
+                  {myPrograms.map((p) => (
+                    <span
+                      key={p.id_ref}
+                      className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted border border-border text-xs text-foreground"
+                    >
+                      {p.title}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-muted"
                 >
-                  {p.title}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-warning mt-2">
-              <AlertCircle className="w-4 h-4" />
-              <p className="text-muted-foreground">
-                Selecione um curso nas configurações para ver apenas as disciplinas do seu curso
-              </p>
-            </div>
-          )}
+                  <Upload className="w-3.5 h-3.5" />
+                  Importar histórico
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+                <div className="flex items-center gap-2 text-warning">
+                  <AlertCircle className="w-4 h-4" />
+                  <p className="text-muted-foreground">
+                    Selecione um curso nas configurações para ver apenas as disciplinas do seu curso
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-muted"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Importar histórico
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="relative mb-6">
@@ -424,30 +490,6 @@ const Disciplinas = () => {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="inline-flex items-stretch text-sm shrink-0">
-              {([
-                { id: 'all', label: 'Todos' },
-                { id: 'obrigatoria', label: 'Obrigatórias' },
-                { id: 'optativa', label: 'Optativas' },
-                { id: 'geral', label: 'Global' },
-              ] as const).map((b, idx) => (
-                <button
-                  key={b.id}
-                  type="button"
-                  onClick={() => setTypeFilter(b.id)}
-                  className={cn(
-                    'px-2.5 py-1.5 border border-border -ml-px first:ml-0',
-                    idx === 0 ? 'rounded-l-xl' : '',
-                    idx === 3 ? 'rounded-r-xl' : '',
-                    typeFilter === b.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-accent'
-                  )}
-                >
-                  {b.label}
-                </button>
-              ))}
             </div>
           </div>
           <CollapsibleContent>
@@ -890,6 +932,99 @@ const Disciplinas = () => {
               </motion.div>
             </motion.div>
           )}
+
+          {/* Modal de disciplina bloqueada por pré-requisitos */}
+          <AnimatePresence>
+            {showBlockedModal && pendingAction?.course && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+                onClick={() => setShowBlockedModal(false)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.98, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.98, y: 20 }}
+                  className="bg-background rounded-xl shadow-xl max-w-md w-full border"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between p-6 border-b">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center">
+                        <AlertCircle className="w-5 h-5 text-warning" />
+                      </div>
+                      <div>
+                        <p className="text-lg font-semibold text-foreground">Disciplina Bloqueada</p>
+                        <p className="text-sm text-muted-foreground">Pré-requisitos não cursados</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setShowBlockedModal(false)} className="text-muted-foreground hover:text-foreground">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="p-6 space-y-4">
+                    <p className="text-sm text-foreground">
+                      <span className="font-semibold">{pendingAction.course.code} - {pendingAction.course.name}</span> possui pré-requisitos que ainda não foram cursados:
+                    </p>
+                    
+                    <div className="space-y-2">
+                      {getPrerequisitesList(pendingAction.course).map(prereqCode => (
+                        <div key={prereqCode} className="flex items-center gap-2 text-sm">
+                          <div className={cn(
+                            "w-2 h-2 rounded-full",
+                            completedDisciplines.includes(prereqCode) 
+                              ? "bg-success" 
+                              : "bg-muted"
+                          )} />
+                          <span className={cn(
+                            completedDisciplines.includes(prereqCode)
+                              ? "text-success line-through"
+                              : "text-foreground"
+                          )}>
+                            {prereqCode}
+                          </span>
+                          {completedDisciplines.includes(prereqCode) && (
+                            <span className="text-xs text-success">✓ Cursado</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">
+                      Como você deseja prosseguir?
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3 justify-end p-6 border-t">
+                    <button
+                      onClick={() => {
+                        setShowBlockedModal(false);
+                        setPendingAction(null);
+                      }}
+                      className="px-4 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-muted"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={markOnlyCurrentAsCompleted}
+                      className="px-4 py-2 rounded-lg bg-warning/10 text-warning text-sm font-semibold hover:bg-warning/20"
+                    >
+                      Marcar apenas esta
+                    </button>
+                    <button
+                      onClick={markPrereqsAsCompleted}
+                      className="px-4 py-2 rounded-lg bg-success text-success-foreground text-sm font-semibold hover:bg-success/90"
+                    >
+                      Marcar pré-requisitos + esta
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </AnimatePresence>
       </div>
     </MainLayout>

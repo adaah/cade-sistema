@@ -37,7 +37,10 @@ export function DisciplineCard({ discipline, onClick, available, blocked, onRest
 
   const handleCompletedClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onRestrictedAction) {
+    // Se já está cursada, permite desmarcar diretamente sem modal
+    if (isCompleted) {
+      toggleCompletedDiscipline(discipline.code);
+    } else if (onRestrictedAction) {
       onRestrictedAction('completed', discipline);
     } else {
       toggleCompletedDiscipline(discipline.code);
@@ -65,10 +68,12 @@ export function DisciplineCard({ discipline, onClick, available, blocked, onRest
         <span
           className={cn(
             "px-2.5 py-1 rounded-lg text-[10px] sm:text-xs font-semibold",
-            (discipline as any).type === 'obrigatoria'
-              ? "bg-primary/10 text-primary"
-              : (discipline as any).type
+            showCompletedStyles
+              ? "bg-success/10 text-success"
+              : showAvailable
               ? "bg-warning/10 text-warning"
+              : showBlocked
+              ? "bg-muted text-muted-foreground"
               : "bg-muted text-muted-foreground"
           )}
         >
