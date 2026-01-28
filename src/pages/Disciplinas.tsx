@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, AlertCircle } from 'lucide-react';
+import { Search, AlertCircle, X, BookOpen, Upload } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { reduce, append } from 'ramda'
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -10,7 +10,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useCourses as useAllCourses, useSections } from '@/hooks/useApi';
 import { useMyCourses } from '@/hooks/useMyCourses';
 import { useMyPrograms } from '@/hooks/useMyPrograms';
-import {Course, CourseApi} from '@/services/api';
+import {Course, CourseApi, fetchCourseDetail} from '@/services/api';
 import {cn, getSemesterTitle} from '@/lib/utils';
 import { fuzzyFilter } from '@/lib/fuzzy';
 import { useMode } from '@/hooks/useMode';
@@ -25,8 +25,9 @@ const Disciplinas = () => {
   const { completedDisciplines, toggleCompletedDiscipline } = useApp();
   const { myPrograms } = useMyPrograms();
   const { courses, isLoading, levels } = useMyCourses();
-  const { isSimplified, isFull } = useMode();
-  const { isFavorite, favoriteCodes } = useFavoriteCourses();
+  const { isSimplified, isFull, setMode } = useMode();
+  const { isFavorite, favoriteCodes, toggleFavorite } = useFavoriteCourses();
+  const { data: allCourses = [] } = useAllCourses();
 
   const selectedProgram = myPrograms.find(Boolean);
   
@@ -34,6 +35,149 @@ const Disciplinas = () => {
   // search, semester and modal states
   const [activeSemester, setActiveSemester] = useState<number | null>(null);
   const [selectedDiscipline, setSelectedDiscipline] = useState<Course | null>(null);
+  const [showDisciplinesModal, setShowDisciplinesModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ type: 'completed' | 'favorite' | 'import'; course?: Course; codes?: string[] } | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [parsedCodes, setParsedCodes] = useState<string[]>([]);
+  const [importError, setImportError] = useState<string>('');
+  const [isParsing, setIsParsing] = useState(false);
+  const [prereqCache, setPrereqCache] = useState<Map<string, string[]>>(new Map());
+
+  useEffect(() => {
+    const hasVisited = localStorage.getItem('firstVisitDisciplinas');
+    if (!hasVisited) {
+      setShowDisciplinesModal(true);
+    }
+  }, []);
+
+  const handleRestrictedAction = (type: 'completed' | 'favorite', course: Course) => {
+    if (isSimplified) {
+      setPendingAction({ type, course });
+      setShowUpgradeModal(true);
+    } else {
+      if (type === 'completed') {
+        toggleCompletedDiscipline(course.code);
+      } else {
+        toggleFavorite(course.code);
+      }
+    }
+  };
+
+  const confirmUpgrade = () => {
+    if (pendingAction) {
+      setMode('full');
+      localStorage.setItem('mode', 'full');
+      localStorage.setItem('experienceMode', 'completa');
+      setShowUpgradeModal(false);
+      // Executar a ação após upgrade
+      if (pendingAction.type === 'completed' && pendingAction.course) {
+        toggleCompletedDiscipline(pendingAction.course.code);
+      } else if (pendingAction.type === 'favorite' && pendingAction.course) {
+        toggleFavorite(pendingAction.course.code);
+      } else if (pendingAction.type === 'import' && pendingAction.codes) {
+        applyImportedCodes(pendingAction.codes);
+      }
+      setPendingAction(null);
+    }
+  };
+
+  const codeRegex = /[A-Z]{3,}\d{2,}[A-Z]?/g;
+  const approvedTokens = ['APR', 'CUMP', 'DISP'];
+  const rejectedTokens = ['REP', 'REPF', 'REPMF', 'TRANC', 'CANC'];
+
+  const parseHistoryText = (text: string) => {
+    const approved = new Set<string>();
+    const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+
+    for (const line of lines) {
+      const codes = line.match(codeRegex) || [];
+      if (codes.length === 0) continue;
+
+      const hasRejected = rejectedTokens.some(token => line.includes(token));
+      const hasApproved = approvedTokens.some(token => line.includes(token));
+      if (hasApproved && !hasRejected) {
+        codes.forEach(c => approved.add(c));
+      }
+    }
+
+    // Equivalências: "Cumpriu <CODE>" ou "Cumpriu CODE - ..."
+    const eqRegex = /Cumpriu\s+([A-Z]{3,}\d{2,}[A-Z]?)/gi;
+    let match;
+    while ((match = eqRegex.exec(text)) !== null) {
+      approved.add(match[1]);
+    }
+
+    return Array.from(approved);
+  };
+
+  const handleParseImport = (text: string) => {
+    setImportError('');
+    const codes = parseHistoryText(text);
+    setParsedCodes(codes);
+    setImportText(text);
+    if (codes.length === 0) {
+      setImportError('Não foi possível encontrar disciplinas com status aprovado. Confira o texto ou tente outro arquivo.');
+    }
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsParsing(true);
+    setImportError('');
+    try {
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        const pdfjs = await import('pdfjs-dist');
+        const { getDocument, GlobalWorkerOptions } = pdfjs as any;
+        const workerSrc = (await import('pdfjs-dist/build/pdf.worker.min.mjs')).default;
+        GlobalWorkerOptions.workerSrc = workerSrc;
+
+        const data = await file.arrayBuffer();
+        const pdf = await getDocument({ data }).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const strings = content.items.map((item: any) => item.str || '').join(' ');
+          fullText += strings + '\n';
+        }
+        handleParseImport(fullText);
+      } else {
+        const text = await file.text();
+        handleParseImport(text);
+      }
+    } catch (err) {
+      console.error(err);
+      setImportError('Não foi possível ler o PDF. Copie e cole o texto do histórico como alternativa.');
+    } finally {
+      setIsParsing(false);
+      if (event.target) event.target.value = '';
+    }
+  };
+
+  const applyImportedCodes = (codes: string[]) => {
+    codes.forEach(code => {
+      if (!completedDisciplines.includes(code)) {
+        toggleCompletedDiscipline(code);
+      }
+    });
+  };
+
+  const handleApplyImport = () => {
+    if (parsedCodes.length === 0) {
+      setImportError('Nenhum código aprovado encontrado para aplicar.');
+      return;
+    }
+    if (isSimplified) {
+      setPendingAction({ type: 'import', codes: parsedCodes });
+      setShowUpgradeModal(true);
+      return;
+    }
+    applyImportedCodes(parsedCodes);
+    setShowImportModal(false);
+  };
 
   const coursesByLevel = useMemo(
       () =>
@@ -45,13 +189,131 @@ const Disciplinas = () => {
       [courses]
   );
 
+  const allCoursesByCode = useMemo(() => new Map(allCourses.map((c) => [c.code, c])), [allCourses]);
+
+  // Prefetch prereqs from course detail for courses without prereqs info
+  useEffect(() => {
+    const missing = courses
+      .filter((c) => getPrereqCodes(c).length === 0 && !prereqCache.has(c.code) && (c as any).detail_url)
+      .map((c) => ({ code: c.code, url: (c as any).detail_url }));
+    if (missing.length === 0) return;
+
+    (async () => {
+      const updates = new Map(prereqCache);
+      for (const item of missing) {
+        try {
+          const detail = await fetchCourseDetail(item.url);
+          const prereqs = (detail as any)?.prerequisites ?? [];
+          const codes = getPrereqCodes({ prerequisites: prereqs } as any);
+          updates.set(item.code, codes);
+        } catch (e) {
+          console.warn('Falha ao buscar pré-requisitos para', item.code, e);
+        }
+      }
+      setPrereqCache(updates);
+    })();
+  }, [courses, prereqCache]);
+
+
+  const normalizeCode = (val: any) => String(val || '').trim();
+
+  const extractCodesFromString = (str: string) => {
+    if (!str) return [] as string[];
+    const matches = str.match(codeRegex) || [];
+    if (matches.length > 0) return matches;
+    return str
+      .split(/[,;/|]/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+  };
+
+  const baseCode = (code: string) => {
+    const clean = code.replace(/[^A-Z0-9]/gi, '');
+    const m = clean.match(/^([A-Z]+\d+)([A-Z])?$/);
+    if (!m) return clean;
+    return m[1];
+  };
+
+  const getPrereqCodes = (course?: Course | null) => {
+    if (!course) return [] as string[];
+    const raw: any =
+      (course as any).prerequisites ??
+      (course as any).prereqs ??
+      (course as any).prerequisite_codes ??
+      (course as any).prereq_codes ??
+      (course as any).pre_requisites ??
+      (course as any).requisites ??
+      [];
+
+    const asArray = Array.isArray(raw) ? raw : [raw];
+
+    const extractCodes = (item: any): string[] => {
+      if (!item) return [] as string[];
+      if (Array.isArray(item)) {
+        return item.flatMap(extractCodes);
+      }
+      // Object with code field
+      if (typeof item === 'object') {
+        const maybeCode = (item as any).code ?? (item as any).id_ref ?? (item as any).sigla;
+        if (maybeCode) return [normalizeCode(maybeCode)];
+        return Object.values(item).flatMap(extractCodes);
+      }
+      // String with codes and description
+      const str = normalizeCode(item);
+      if (!str) return [] as string[];
+      return extractCodesFromString(str);
+    };
+
+    const codes = asArray.flatMap(extractCodes);
+
+    return Array.from(new Set(codes));
+  };
+
+  const hasAllPrereqsDone = (course: Course) => {
+    let prereqs = getPrereqCodes(course);
+
+    // cache from detalhes já buscados
+    if (prereqs.length === 0) {
+      const cached = prereqCache.get(course.code);
+      if (cached && cached.length > 0) {
+        prereqs = cached;
+      }
+    }
+
+    // fallback: índice global
+    if (prereqs.length === 0) {
+      const fallback = allCoursesByCode.get(course.code);
+      if (fallback) {
+        const fbCodes = getPrereqCodes(fallback as any);
+        if (fbCodes.length > 0) prereqs = fbCodes;
+      }
+    }
+
+    // Se ainda não temos pré-req e há detail_url, considerar bloqueado até carregar
+    if (prereqs.length === 0) {
+      const detailUrl = (course as any)?.detail_url;
+      if (detailUrl && !prereqCache.has(course.code)) {
+        return false;
+      }
+      // Se não há detail_url, assume que não tem pré-req
+      return true;
+    }
+
+    return prereqs.every((code) => {
+      const norm = normalizeCode(code);
+      const base = baseCode(norm);
+      return completedDisciplines.some((c) => {
+        const cNorm = normalizeCode(c);
+        return cNorm === norm || baseCode(cNorm) === base;
+      });
+    });
+  };
 
   const canTake = (code: string): boolean => {
     const course = courses?.find(c => c.code === code);
     if (!course) return false;
     if (completedDisciplines.includes(code)) return false;
-    const prerequisites = [];
-    return prerequisites.every(prereq => completedDisciplines.includes(prereq));
+    return hasAllPrereqsDone(course);
   };
 
   // Sections são carregadas internamente pelo DisciplineDetail
@@ -82,7 +344,6 @@ const Disciplinas = () => {
   // Order select state: 'name' (default) | 'sections'
   const [orderBy, setOrderBy] = useState<'name' | 'sections'>('name');
   // Catálogo global da universidade
-  const { data: allCourses = [] } = useAllCourses();
   const [globalLimit, setGlobalLimit] = useState(60);
   useEffect(() => {
     if (typeFilter === 'geral') {
@@ -97,11 +358,18 @@ const Disciplinas = () => {
     <MainLayout>
       <div className="p-6 max-w-6xl mx-auto animate-fade-in">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground mb-2">
-            Catálogo de Disciplinas
-          </h1>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h1 className="text-2xl font-bold text-foreground">Catálogo de Disciplinas</h1>
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted"
+            >
+              <Upload className="w-4 h-4" />
+              Importar histórico
+            </button>
+          </div>
           {myPrograms.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 mt-2">
               {myPrograms.map((p) => (
                 <span
                   key={p.id_ref}
@@ -112,7 +380,7 @@ const Disciplinas = () => {
               ))}
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-warning">
+            <div className="flex items-center gap-2 text-warning mt-2">
               <AlertCircle className="w-4 h-4" />
               <p className="text-muted-foreground">
                 Selecione um curso nas configurações para ver apenas as disciplinas do seu curso
@@ -342,10 +610,10 @@ const Disciplinas = () => {
                     <AnimatePresence mode="popLayout">
                     {filteredSemesterCourses.map((course) => {
                       const completed = completedDisciplines.includes(course.code);
-                      const available = canTake(course.code);
+                      const available = !completed && hasAllPrereqsDone(course);
                       const blocked = !completed && !available;
-                      const availableProp = isSimplified ? true : available;
-                      const blockedProp = isSimplified ? false : blocked;
+                      const availableProp = available;
+                      const blockedProp = blocked;
 
                       return (
                         <motion.div
@@ -362,6 +630,7 @@ const Disciplinas = () => {
                             available={availableProp}
                             blocked={blockedProp}
                             onClick={() => setSelectedDiscipline(course)}
+                            onRestrictedAction={handleRestrictedAction}
                           />
                         </motion.div>
                       );
@@ -387,6 +656,241 @@ const Disciplinas = () => {
             onClose={() => setSelectedDiscipline(null)}
           />
         )}
+
+        {/* Modal de Importar Histórico */}
+        <AnimatePresence>
+          {showImportModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+              onClick={() => setShowImportModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 10 }}
+                transition={{ duration: 0.18 }}
+                className="w-full max-w-2xl bg-card rounded-2xl shadow-xl border border-border/60 p-6 space-y-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Upload className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold text-foreground">Importar histórico</p>
+                      <p className="text-sm text-muted-foreground">
+                        Envie o PDF ou cole o texto do histórico para marcar disciplinas cursadas.
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowImportModal(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 px-4 py-3 border rounded-lg cursor-pointer hover:bg-muted">
+                    <Upload className="w-4 h-4" />
+                    <span className="text-sm">Selecionar PDF</span>
+                    <input type="file" accept=".pdf,text/plain" className="hidden" onChange={handleFileChange} />
+                  </label>
+
+                  <textarea
+                    className="w-full min-h-[140px] rounded-lg border border-border bg-background p-3 text-sm"
+                    placeholder="Cole aqui o texto do histórico (Ctrl+A, Ctrl+C no PDF aberto)"
+                    value={importText}
+                    onChange={(e) => handleParseImport(e.target.value)}
+                  />
+
+                  {isParsing && <p className="text-sm text-muted-foreground">Lendo PDF...</p>}
+                  {importError && <p className="text-sm text-destructive">{importError}</p>}
+
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Disciplinas aprovadas detectadas: {parsedCodes.length}
+                    </p>
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-auto border border-border/70 rounded-lg p-2">
+                      {parsedCodes.length === 0 ? (
+                        <span className="text-xs text-muted-foreground">Nenhuma encontrada ainda.</span>
+                      ) : (
+                        parsedCodes.map(code => (
+                          <span key={code} className="px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-semibold">
+                            {code}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowImportModal(false);
+                      setParsedCodes([]);
+                      setImportText('');
+                      setImportError('');
+                    }}
+                    className="px-4 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-muted"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleApplyImport}
+                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
+                    disabled={isParsing}
+                  >
+                    Aplicar e marcar cursadas
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Modal de Boas-Vindas da tela Disciplinas */}
+        <AnimatePresence>
+          {showDisciplinesModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+              onClick={() => setShowDisciplinesModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 10 }}
+                transition={{ duration: 0.18 }}
+                className="w-full max-w-md bg-card rounded-2xl shadow-xl border border-border/60 p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <BookOpen className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold text-foreground">Disciplinas</p>
+                      <p className="text-sm text-muted-foreground">Gerencie sua grade curricular</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowDisciplinesModal(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-3 mb-6">
+                  <p className="text-sm text-foreground leading-relaxed">
+                    Aqui você pode indicar quais disciplinas já realizou, ver detalhes sobre as disciplinas da grade, 
+                    e ter uma visualização otimizada com base no semestre, optativas e obrigatórias.
+                  </p>
+                  {isFull && (
+                    <p className="text-sm text-muted-foreground">
+                      Na experiência completa, isso otimiza na hora de fazer o planejamento da grade, 
+                      mostrando apenas as disciplinas disponíveis e compatíveis com seu progresso.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-3 justify-end">
+                  {isSimplified && (
+                    <button
+                      onClick={() => {
+                        setMode('full');
+                        setShowDisciplinesModal(false);
+                        localStorage.setItem('firstVisitDisciplinas', 'true');
+                      }}
+                      className="px-4 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-muted"
+                    >
+                      Mudar para modo completo
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setShowDisciplinesModal(false);
+                      localStorage.setItem('firstVisitDisciplinas', 'true');
+                    }}
+                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
+                  >
+                    Continuar
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* Modal de Upgrade para Modo Completo */}
+        <AnimatePresence>
+          {showUpgradeModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+              onClick={() => setShowUpgradeModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 10 }}
+                transition={{ duration: 0.18 }}
+                className="w-full max-w-md bg-card rounded-2xl shadow-xl border border-border/60 p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <BookOpen className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold text-foreground">Modo Completo</p>
+                      <p className="text-sm text-muted-foreground">Desbloqueie recursos avançados</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowUpgradeModal(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-3 mb-6">
+                  <p className="text-sm text-foreground leading-relaxed">
+                    {pendingAction?.type === 'favorite' 
+                      ? 'Para favoritar disciplinas, você precisa usar o modo completo.'
+                      : 'Para marcar disciplinas como cursadas, você precisa usar o modo completo.'
+                    }
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Deseja mudar para o modo completo para acessar esta funcionalidade?
+                  </p>
+                </div>
+
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => {
+                      setShowUpgradeModal(false);
+                      setPendingAction(null);
+                    }}
+                    className="px-4 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-muted"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmUpgrade}
+                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
+                  >
+                    Mudar para Completo
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </MainLayout>
   );

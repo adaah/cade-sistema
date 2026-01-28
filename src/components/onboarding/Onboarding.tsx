@@ -203,6 +203,16 @@ export function Onboarding() {
   const [selectedLocation, setSelectedLocation] = useState<string>('SALVADOR');
   const [selectedMode, setSelectedMode] = useState<string>('PRESENCIAL');
   const [selectedId, setSelectedId] = useState<string | null>(selectedPrograms[0] || null);
+  const [experienceMode, setExperienceMode] = useState<'simplificada' | 'completa' | null>(null);
+  const [modalExperienceMode, setModalExperienceMode] = useState<'simplificada' | 'completa' | null>(null);
+  const [showExperienceModal, setShowExperienceModal] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('experienceMode');
+    if (stored === 'simplificada' || stored === 'completa') {
+      setExperienceMode(stored);
+    }
+  }, []);
   
   // Extrair localizações e modalidades únicas dos programas
   const { locations, modes } = useMemo(() => {
@@ -252,24 +262,44 @@ export function Onboarding() {
     setSelectedId(null);
   };
 
+  const finalizeExperience = (mode: 'simplificada' | 'completa') => {
+    setExperienceMode(mode);
+    localStorage.setItem('experienceMode', mode);
+    // Sincronizar com o hook useMode
+    localStorage.setItem('mode', mode === 'simplificada' ? 'simplified' : 'full');
+    setIsOnboarded(true);
+    setShowExperienceModal(false);
+    // Redirecionar conforme a escolha
+    if (mode === 'simplificada') {
+      window.location.href = '/planejador';
+    } else {
+      window.location.href = '/';
+    }
+  };
+
   const handleSubmit = () => {
-    if (selectedId) {
-      setSelectedPrograms([selectedId]);
-      setIsOnboarded(true);
+    if (!selectedId) return;
+    setSelectedPrograms([selectedId]);
+    if (experienceMode) {
+      finalizeExperience(experienceMode);
+    } else {
+      setModalExperienceMode(null);
+      setShowExperienceModal(true);
     }
   };
   
   const selectedProgram = programs.find((p: any) => p.id_ref === selectedId);
 
   return (
-    <div className="min-h-screen w-full flex items-start justify-center bg-gradient-to-br from-background to-muted/30 p-4 pt-6 sm:pt-8 sm:items-start sm:pt-12">
-      <div className="w-full max-w-2xl h-auto max-h-[calc(100vh-2rem)] sm:h-[calc(100vh-6rem)] flex flex-col animate-fade-in overflow-hidden">
-        {/* Header */}
-        <motion.div 
-          initial={{ y: -10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="flex items-center gap-3 mb-4 sm:mb-5 px-1"
-        >
+    <>
+      <div className="min-h-screen w-full flex items-start justify-center bg-gradient-to-br from-background to-muted/30 p-4 pt-6 sm:pt-8 sm:items-start sm:pt-12">
+        <div className="w-full max-w-2xl h-auto max-h-[calc(100vh-2rem)] sm:h-[calc(100vh-6rem)] flex flex-col animate-fade-in overflow-hidden">
+          {/* Header */}
+          <motion.div 
+            initial={{ y: -10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="flex items-center gap-3 mb-4 sm:mb-5 px-1"
+          >
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow flex items-center justify-center flex-shrink-0">
             <GraduationCap className="w-5 h-5 text-primary-foreground" />
           </div>
@@ -495,32 +525,18 @@ export function Onboarding() {
                 disabled={!selectedId}
                 whileTap={{ scale: selectedId ? 0.98 : 1 }}
                 className={cn(
-                  "w-full py-3 rounded-lg font-medium transition-all relative overflow-hidden text-sm",
-                  "focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2",
+                  "w-full py-3 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2",
                   selectedId
-                    ? "bg-gradient-to-r from-primary to-primary/90 text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-primary/30"
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
                     : "bg-muted text-muted-foreground cursor-not-allowed"
                 )}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4, duration: 0.3 }}
               >
-                {selectedId ? (
-                  <motion.span
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center justify-center gap-2"
-                  >
-                    <span>Confirmar seleção</span>
-                    <Check className="w-4 h-4" />
-                  </motion.span>
-                ) : (
-                  <span>Selecione um curso</span>
-                )}
-                
-                {/* Animated background on hover */}
+                {selectedId ? 'Continuar' : 'Selecione um curso'}
                 {selectedId && (
-                  <motion.div 
-                    className="absolute inset-0 bg-gradient-to-r from-primary/80 to-primary/60 opacity-0 hover:opacity-100 transition-opacity"
-                    initial={{ opacity: 0 }}
-                  />
+                  <Check className="w-4 h-4" />
                 )}
               </motion.button>
 
@@ -530,8 +546,100 @@ export function Onboarding() {
             </div>
           </div>
           
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
-    </div>
+
+      {/* Modal de escolha de experiência */}
+      <AnimatePresence>
+        {showExperienceModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setShowExperienceModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              transition={{ duration: 0.18 }}
+              className="w-full max-w-lg bg-card rounded-2xl shadow-xl border border-border/60 p-6" 
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Como você quer usar o CADEE?</p>
+                  <p className="text-sm text-muted-foreground">Você pode alterar depois nas Configurações.</p>
+                </div>
+                <button onClick={() => setShowExperienceModal(false)} className="text-muted-foreground hover:text-foreground">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 mb-4">
+                <label className={cn(
+                  "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                  modalExperienceMode === 'simplificada' ? "border-primary bg-primary/5" : "border-border/60 hover:bg-muted"
+                )}>
+                  <input
+                    type="radio"
+                    name="experience-modal"
+                    value="simplificada"
+                    checked={modalExperienceMode === 'simplificada'}
+                    onChange={() => setModalExperienceMode('simplificada')}
+                    className="mt-1 accent-primary"
+                  />
+                  <div className="text-sm">
+                    <p className="font-semibold text-foreground">Versão simplificada</p>
+                    <p className="text-muted-foreground text-xs mt-0.5">Ir direto para o Planejador. Ideal para começar rápido.</p>
+                  </div>
+                </label>
+
+                <label className={cn(
+                  "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                  modalExperienceMode === 'completa' ? "border-primary bg-primary/5" : "border-border/60 hover:bg-muted"
+                )}>
+                  <input
+                    type="radio"
+                    name="experience-modal"
+                    value="completa"
+                    checked={modalExperienceMode === 'completa'}
+                    onChange={() => setModalExperienceMode('completa')}
+                    className="mt-1 accent-primary"
+                  />
+                  <div className="text-sm">
+                    <p className="font-semibold text-foreground">Versão completa</p>
+                    <p className="text-muted-foreground text-xs mt-0.5">Acesso a todos os recursos. Sempre pode mudar depois.</p>
+                  </div>
+                </label>
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowExperienceModal(false)}
+                  className="px-4 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-muted"
+                >
+                  Voltar
+                </button>
+                <button
+                  onClick={() => modalExperienceMode && finalizeExperience(modalExperienceMode)}
+                  disabled={!modalExperienceMode}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-semibold",
+                    modalExperienceMode
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                      : "bg-muted text-muted-foreground cursor-not-allowed"
+                  )}
+                >
+                  Confirmar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

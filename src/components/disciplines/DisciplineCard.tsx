@@ -1,4 +1,4 @@
-import { Clock, Check, Users } from 'lucide-react';
+import { Clock, Check, Users, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
@@ -12,9 +12,10 @@ interface DisciplineCardProps {
   onClick: () => void;
   available?: boolean;
   blocked?: boolean;
+  onRestrictedAction?: (type: 'completed' | 'favorite', course: Course) => void;
 }
 
-export function DisciplineCard({ discipline, onClick, available, blocked }: DisciplineCardProps) {
+export function DisciplineCard({ discipline, onClick, available, blocked, onRestrictedAction }: DisciplineCardProps) {
   const { completedDisciplines, toggleCompletedDiscipline } = useApp();
   const { isSimplified } = useMode();
   const { isFavorite, toggleFavorite } = useFavoriteCourses();
@@ -22,8 +23,26 @@ export function DisciplineCard({ discipline, onClick, available, blocked }: Disc
   const isCompleted = completedDisciplines.includes(discipline.code);
   const favorite = isFavorite(discipline.code);
   const showCompletedStyles = isCompleted;
-  const showBlocked = !isSimplified && !!blocked;
-  const showAvailable = isSimplified ? !isCompleted : !!available;
+  const showBlocked = !!blocked;
+  const showAvailable = !!available;
+
+  const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onRestrictedAction) {
+      onRestrictedAction('favorite', discipline);
+    } else {
+      toggleFavorite(discipline.code);
+    }
+  };
+
+  const handleCompletedClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onRestrictedAction) {
+      onRestrictedAction('completed', discipline);
+    } else {
+      toggleCompletedDiscipline(discipline.code);
+    }
+  };
 
   return (
     <motion.div
@@ -56,15 +75,20 @@ export function DisciplineCard({ discipline, onClick, available, blocked }: Disc
           {discipline.code}
         </span>
         <div className="flex items-center gap-1">
-          <FavoriteButton
-            active={favorite}
-            onToggle={() => toggleFavorite(discipline.code)}
-          />
           <motion.button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleCompletedDiscipline(discipline.code);
-            }}
+            onClick={handleFavoriteClick}
+            className={cn(
+              'p-2 rounded-lg transition-colors',
+              favorite ? 'text-rose-600 bg-rose-500/10' : 'text-muted-foreground hover:bg-muted'
+            )}
+            aria-label={favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+            whileHover={{ scale: 1.12 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Heart className={cn('w-4 h-4', favorite && 'fill-current')} />
+          </motion.button>
+          <motion.button
+            onClick={handleCompletedClick}
             className={cn(
               "p-2 rounded-lg transition-colors",
               isCompleted

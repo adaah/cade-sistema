@@ -41,7 +41,8 @@ export function useMyCourses() {
           type: c.type,
           credits: c.credits,
           workload: c.workload,
-          prerequisites: c.prerequisites,
+          // usa prerequisitos do programa; se não houver, usa do índice
+          prerequisites: c.prerequisites ?? (idx as any)?.prerequisites ?? (idx as any)?.prereqs ?? (idx as any)?.prerequisite_codes,
           // Enriquecimento a partir do índice
           sections_count: idx?.sections_count ?? 0,
           sections_url: idx?.sections_url,

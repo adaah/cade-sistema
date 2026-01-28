@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { useMySections } from '@/hooks/useMySections';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -7,9 +7,11 @@ import { ScheduleGrid } from '@/components/planner/ScheduleGrid';
 import { ScheduleSummary } from '@/components/planner/ScheduleSummary';
 import { MobileSchedule } from '@/components/planner/MobileSchedule';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Calendar, BookOpen, BarChart3 } from 'lucide-react';
+import { Calendar, BookOpen, BarChart3, X, Sparkles, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ProgressView } from '@/components/progress/ProgressView';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useMode } from '@/hooks/useMode';
 
 const Index = () => {
   const { completedDisciplines } = useApp();
@@ -17,6 +19,15 @@ const Index = () => {
   const { myPrograms } = useMyPrograms();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<'schedule' | 'progress'>('schedule');
+  const { mode, setMode, isFull, isSimplified } = useMode();
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+
+  useEffect(() => {
+    const hasVisited = localStorage.getItem('firstVisit');
+    if (!hasVisited) {
+      setShowWelcomeModal(true);
+    }
+  }, []);
 
   // Get unique scheduled disciplines
   const scheduledCount = useMemo(() => {
@@ -165,6 +176,80 @@ const Index = () => {
         {/* Tab Content */}
         {renderTabContent()}
       </div>
+
+      {/* Modal de Boas-Vindas (primeira visita) */}
+      <AnimatePresence>
+        {showWelcomeModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setShowWelcomeModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              transition={{ duration: 0.18 }}
+              className="w-full max-w-md bg-card rounded-2xl shadow-xl border border-border/60 p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-foreground">Bem-vindo ao CADEE!</p>
+                    <p className="text-sm text-muted-foreground">Seu planejador semestral inteligente</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowWelcomeModal(false)} className="text-muted-foreground hover:text-foreground">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 mb-6">
+                <p className="text-sm text-foreground leading-relaxed">
+                  O CADEE te ajuda a montar sua grade de horários de forma visual e inteligente. 
+                  Compare turmas, veja conflitos em tempo real e planeje seu semestre com tranquilidade.
+                </p>
+                {isFull && (
+                  <p className="text-sm text-muted-foreground">
+                    No modo completo, você também pode gerenciar sua formação: registrar disciplinas já cursadas, 
+                    acompanhar seu progresso e planejar os semestres futuros.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                {isSimplified && (
+                  <button
+                    onClick={() => {
+                      setMode('full');
+                      setShowWelcomeModal(false);
+                      localStorage.setItem('firstVisit', 'true');
+                    }}
+                    className="px-4 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-muted"
+                  >
+                    Mudar para modo completo
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setShowWelcomeModal(false);
+                    localStorage.setItem('firstVisit', 'true');
+                  }}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
+                >
+                  Continuar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </MainLayout>
   );
 };
