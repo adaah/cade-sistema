@@ -252,6 +252,14 @@ const Planejador = () => {
   const { hasSectionOnCourse, toggleSection, getConflictsForSection, mySections, clearSections } = useMySections();
   const { data: allSections = [] } = useSections();
   const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
+  const [applyFiltersToSections, setApplyFiltersToSections] = useState(true);
+
+  const hasActiveFilters = useMemo(() => (
+    diasSelecionados.length > 0 ||
+    horariosSelecionados.length > 0 ||
+    diasRestritos.length > 0 ||
+    horariosRestritos.length > 0
+  ), [diasSelecionados, horariosSelecionados, diasRestritos, horariosRestritos]);
 
   // Helper para normalizar texto (remove acentos) para busca
   const normalizeText = (text: string) =>
@@ -368,12 +376,14 @@ const Planejador = () => {
   }, [courses]);
 
   // Função para carregar as turmas de uma disciplina
-  const handleShowSections = (course: Course) => {
+  const handleShowSections = (course: Course, options?: { ignoreFilters?: boolean }) => {
     // Limpar timeout anterior se existir
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
     }
     
+    setApplyFiltersToSections(!options?.ignoreFilters);
+
     setIsLoadingSections(true);
     setSelectedCourse(course);
     setShowSections(true);
@@ -385,6 +395,8 @@ const Planejador = () => {
     }, 500);
   };
 
+  const handleShowSectionsNoFilters = (course: Course) => handleShowSections(course, { ignoreFilters: true });
+
 // Função para fechar modal de turmas e voltar para lista de disciplinas
   const handleBackToDisciplines = (course: Course) => {
     // Fechar modal de detalhes da seção
@@ -392,6 +404,7 @@ const Planejador = () => {
     
     // Fechar modal de turmas se estiver aberto
     setShowSections(false);
+    setApplyFiltersToSections(true);
     
     // Definir a disciplina como selecionada para destacar na lista
     setSelectedDiscipline(course);
@@ -421,6 +434,7 @@ const Planejador = () => {
     
     setShowSections(false);
     setSelectedCourse(null);
+    setApplyFiltersToSections(true);
     setIsLoadingSections(false);
   };
 
@@ -552,11 +566,14 @@ const Planejador = () => {
                 />
                 <button
                   type="button"
-                  className="flex items-center gap-1 border rounded px-3 py-2 text-sm bg-muted hover:bg-muted/70 transition"
+                  className="relative flex items-center gap-1 border rounded px-3 py-2 text-sm bg-muted hover:bg-muted/70 transition"
                   onClick={() => setFiltroModalOpen(true)}
                 >
                   <Filter className="w-4 h-4" />
                   Filtrar
+                  {hasActiveFilters && (
+                    <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-blue-500 shadow" aria-label="Filtros ativos"></span>
+                  )}
                 </button>
               </div>
 
@@ -878,13 +895,13 @@ const Planejador = () => {
                     </div>
                   ) : (
                     <SectionsList 
-                    courseCode={selectedCourse.code} 
-                    onCourseClick={handleShowSections}
-                    diasSelecionados={diasSelecionados}
-                    horariosSelecionados={horariosSelecionados}
-                    diasRestritos={diasRestritos}
-                    horariosRestritos={horariosRestritos}
-                  />
+                      courseCode={selectedCourse.code}
+                      onCourseClick={handleShowSectionsNoFilters}
+                      diasSelecionados={applyFiltersToSections ? diasSelecionados : []}
+                      horariosSelecionados={applyFiltersToSections ? horariosSelecionados : []}
+                      diasRestritos={applyFiltersToSections ? diasRestritos : []}
+                      horariosRestritos={applyFiltersToSections ? horariosRestritos : []}
+                    />
                   )}
                 </div>
               </motion.div>
@@ -901,7 +918,7 @@ const Planejador = () => {
               toggleSection(selectedSection);
               setSelectedSection(null);
             }}
-            onCourseClick={handleBackToDisciplines}
+            onCourseClick={handleShowSectionsNoFilters}
           />
         )}
       </div>
