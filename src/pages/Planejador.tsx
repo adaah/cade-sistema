@@ -12,7 +12,7 @@ import { useMySections } from '@/hooks/useMySections';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getCompetitionLevel, getPhase1Level, getPhase2Level } from '@/lib/competition';
-import { useCourseSections, usePrograms, useProgramDetail, useCourseByCode, useCourses } from '@/hooks/useApi';
+import { useCourseSections, usePrograms, useProgramDetail, useCourseByCode, useCourses, useSections } from '@/hooks/useApi';
 import { Button } from '@/components/ui/button';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
@@ -250,7 +250,15 @@ const Planejador = () => {
   const [logicaRestricoesHorario, setLogicaRestricoesHorario] = useState<'OU' | 'E'>('OU');
   
   const { hasSectionOnCourse, toggleSection, getConflictsForSection, mySections, clearSections } = useMySections();
+  const { data: allSections = [] } = useSections();
   const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
+
+  // Helper para normalizar texto (remove acentos) para busca
+  const normalizeText = (text: string) =>
+    (text || '')
+      .normalize('NFD')
+      .replace(/\p{Diacritic}+/gu, '')
+      .toLowerCase();
 
   // Filtrar disciplinas por termo de busca e filtros - otimizado
   const disciplinasFiltradas = useMemo(() => {
@@ -263,15 +271,93 @@ const Planejador = () => {
     
     // Aplicar filtro de busca - otimizado com cache do termo
     if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(course => 
-        course.code.toLowerCase().includes(term) || 
-        course.name.toLowerCase().includes(term)
-      );
+      const term = normalizeText(searchTerm);
+      result = result.filter(course => {
+        const codeNorm = normalizeText(course.code);
+        const nameNorm = normalizeText(course.name);
+        return codeNorm.includes(term) || nameNorm.includes(term);
+      });
     }
-    
-    return result;
-  }, [courses, searchTerm]);
+
+    const hasFilters = diasSelecionados.length > 0 || horariosSelecionados.length > 0 || 
+      diasRestritos.length > 0 || horariosRestritos.length > 0;
+
+    if (!hasFilters) return result;
+
+    const selectedDias = diasSelecionados
+      .map(d => mapSiglaParaNome[d as keyof typeof mapSiglaParaNome])
+      .filter(Boolean);
+    const restrictedDias = diasRestritos
+      .map(d => mapSiglaParaNome[d as keyof typeof mapSiglaParaNome])
+      .filter(Boolean);
+
+    const sectionsByCourse = allSections.reduce((acc, section) => {
+      const code = (section as any)?.course?.code || (section as any)?.course_code || '';
+      if (!code) return acc;
+      if (!acc.has(code)) acc.set(code, [] as Section[]);
+      acc.get(code)!.push(section);
+      return acc;
+    }, new Map<string, Section[]>());
+
+    const matchesSection = (section: Section) => {
+      const timeCodes = Array.isArray(section.time_codes) ? section.time_codes : [];
+      if (timeCodes.length === 0) return true;
+
+      const horariosParsed = parseTimeCodes(timeCodes);
+
+      if (selectedDias.length > 0) {
+        const diasNaTurma = horariosParsed.map(h => h.dia);
+        const match = logicaFiltroDia === 'E'
+          ? selectedDias.every(d => diasNaTurma.includes(d))
+          : selectedDias.some(d => diasNaTurma.includes(d));
+        if (!match) return false;
+      }
+
+      if (horariosSelecionados.length > 0) {
+        const horariosNaTurma = horariosParsed.map(h => h.horarioInicio);
+        const match = logicaFiltroHorario === 'E'
+          ? horariosSelecionados.every(h => horariosNaTurma.includes(h))
+          : horariosSelecionados.some(h => horariosNaTurma.includes(h));
+        if (!match) return false;
+      }
+
+      if (restrictedDias.length > 0) {
+        const diasNaTurma = horariosParsed.map(h => h.dia);
+        const match = logicaRestricoes === 'E'
+          ? restrictedDias.every(d => diasNaTurma.includes(d))
+          : restrictedDias.some(d => diasNaTurma.includes(d));
+        if (match) return false;
+      }
+
+      if (horariosRestritos.length > 0) {
+        const horariosNaTurma = horariosParsed.map(h => h.horarioInicio);
+        const match = logicaRestricoesHorario === 'E'
+          ? horariosRestritos.every(h => horariosNaTurma.includes(h))
+          : horariosRestritos.some(h => horariosNaTurma.includes(h));
+        if (match) return false;
+      }
+
+      return true;
+    };
+
+    return result.filter(course => {
+      const sections = sectionsByCourse.get(course.code) || [];
+      if (sections.length === 0) return false;
+      return sections.some(matchesSection);
+    });
+  }, [
+    courses,
+    searchTerm,
+    diasSelecionados,
+    horariosSelecionados,
+    diasRestritos,
+    horariosRestritos,
+    logicaFiltroDia,
+    logicaFiltroHorario,
+    logicaRestricoes,
+    logicaRestricoesHorario,
+    allSections
+  ]);
 
   // Calcular total de turmas ofertadas para o semestre
   const totalTurmasSemestre = useMemo(() => {
@@ -493,7 +579,7 @@ const Planejador = () => {
                       )}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
+                    <div className="grid grid-cols-1 gap-3 md:gap-4">
                       {disciplinasFiltradas.map((course) => (
                         <DisciplineCard 
                           key={course.code}
@@ -1351,6 +1437,13 @@ function SectionsList({
         diasRestritos.length === 0 && horariosRestritos.length === 0) {
       return sections;
     }
+
+    const selectedDias = diasSelecionados
+      .map(d => mapSiglaParaNome[d as keyof typeof mapSiglaParaNome])
+      .filter(Boolean);
+    const restrictedDias = diasRestritos
+      .map(d => mapSiglaParaNome[d as keyof typeof mapSiglaParaNome])
+      .filter(Boolean);
     
     return sections.filter(section => {
       const timeCodes = Array.isArray(section.time_codes) ? section.time_codes : [];
@@ -1360,33 +1453,33 @@ function SectionsList({
       const horariosParsed = parseTimeCodes(timeCodes);
       
       // Verificar filtros de dias selecionados
-      if (diasSelecionados.length > 0) {
+      if (selectedDias.length > 0) {
         const temDiaSelecionado = horariosParsed.some(h => 
-          diasSelecionados.includes(h.dia)
+          selectedDias.includes(h.dia)
         );
         if (!temDiaSelecionado) return false;
       }
       
-      // Verificar filtros de horários selecionados
+      // Verificar filtros de horários selecionados (usa horário de início)
       if (horariosSelecionados.length > 0) {
         const temHorarioSelecionado = horariosParsed.some(h => 
-          horariosSelecionados.includes(`${h.horarioInicio}-${h.horarioFim}`)
+          horariosSelecionados.includes(h.horarioInicio)
         );
         if (!temHorarioSelecionado) return false;
       }
       
       // Verificar restrições de dias
-      if (diasRestritos.length > 0) {
+      if (restrictedDias.length > 0) {
         const temDiaRestrito = horariosParsed.some(h => 
-          diasRestritos.includes(h.dia)
+          restrictedDias.includes(h.dia)
         );
         if (temDiaRestrito) return false;
       }
       
-      // Verificar restrições de horários
+      // Verificar restrições de horários (usa horário de início)
       if (horariosRestritos.length > 0) {
         const temHorarioRestrito = horariosParsed.some(h => 
-          horariosRestritos.includes(`${h.horarioInicio}-${h.horarioFim}`)
+          horariosRestritos.includes(h.horarioInicio)
         );
         if (temHorarioRestrito) return false;
       }
