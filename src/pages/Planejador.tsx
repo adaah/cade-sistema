@@ -487,16 +487,12 @@ const Planejador = () => {
             Planejador de Grade
           </h1>
           <div className="space-y-3">
-            <p className="text-muted-foreground">
-              Monte sua grade horária para o próximo semestre
-            </p>
             {myPrograms.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm text-muted-foreground">Seu curso:</span>
                 {myPrograms.map((p) => (
                   <span
                     key={p.id_ref}
-                    className="inline-flex items-center px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-medium"
+                    className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted text-muted-foreground border border-border text-xs font-medium"
                   >
                     {p.title}
                   </span>

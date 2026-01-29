@@ -20,7 +20,7 @@ export function SemesterGrid({
     <div className="bg-card rounded-lg border border-border p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-foreground">Semestres</h3>
+          <h3 className="text-sm font-medium text-foreground">Semestre</h3>
           {showInfo && (
             <TooltipProvider>
               <Tooltip>
@@ -35,7 +35,7 @@ export function SemesterGrid({
           )}
         </div>
         <span className="text-sm font-medium text-foreground">
-          {currentSemester}/{totalSemesters}
+          {currentSemester}º
         </span>
       </div>
       
@@ -55,10 +55,7 @@ export function SemesterGrid({
                       ? 'bg-blue-500 text-white' 
                       : 'bg-muted text-muted-foreground'}`}
               >
-                {semesterNumber}º
-              </div>
-              <div className="text-[10px] text-center text-muted-foreground">
-                {isCompleted ? 'Feito' : 'Não feito'}
+                {semesterNumber}
               </div>
             </div>
           );

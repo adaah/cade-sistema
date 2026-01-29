@@ -549,7 +549,7 @@ const Disciplinas = () => {
                   {myPrograms.map((p) => (
                     <span
                       key={p.id_ref}
-                      className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted border border-border text-xs text-foreground"
+                      className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted text-muted-foreground border border-border text-xs font-medium"
                     >
                       {p.title}
                     </span>

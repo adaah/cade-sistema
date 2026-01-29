@@ -7,7 +7,7 @@ import { ScheduleGrid } from '@/components/planner/ScheduleGrid';
 import { ScheduleSummary } from '@/components/planner/ScheduleSummary';
 import { MobileSchedule } from '@/components/planner/MobileSchedule';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Calendar, BookOpen, BarChart3, X, Sparkles, Settings } from 'lucide-react';
+import { Calendar, BookOpen, BarChart3, X, Sparkles, Settings, GraduationCap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ProgressView } from '@/components/progress/ProgressView';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -59,9 +59,17 @@ const Index = () => {
         {/* Header */}
         <div className="mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-            <h1 className="text-2xl font-bold text-foreground">
-              {activeTab === 'schedule' ? 'Minha Grade do Semestre' : 'Meu Progresso'}
-            </h1>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">
+                {activeTab === 'schedule' ? 'Resumo do Semestre' : 'Meu Progresso'}
+              </h1>
+              {myPrograms.length > 0 && (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm mt-1">
+                  <GraduationCap className="w-4 h-4" />
+                  <span>UFBA • {myPrograms[0]?.title || 'Seu Curso'} • Noturno</span>
+                </div>
+              )}
+            </div>
             
             {/* Tabs */}
             <div className="inline-flex items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
@@ -89,19 +97,6 @@ const Index = () => {
               </button>
             </div>
           </div>
-          
-          {myPrograms.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {myPrograms.map((p) => (
-                <span
-                  key={p.id_ref}
-                  className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted border border-border text-xs text-foreground"
-                >
-                  {p.title}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Quick Stats - Only show on schedule tab */}
