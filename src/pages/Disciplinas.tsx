@@ -91,26 +91,7 @@ const Disciplinas = () => {
   };
 
   const getPrerequisitesList = (course: Course): string[] => {
-    let prereqs = getPrereqCodes(course);
-
-    // cache from detalhes já buscados
-    if (prereqs.length === 0) {
-      const cached = prereqCache.get(course.code);
-      if (cached && cached.length > 0) {
-        prereqs = cached;
-      }
-    }
-
-    // fallback: índice global
-    if (prereqs.length === 0) {
-      const fallback = allCoursesByCode.get(course.code);
-      if (fallback) {
-        const fbCodes = getPrereqCodes(fallback as any);
-        if (fbCodes.length > 0) prereqs = fbCodes;
-      }
-    }
-
-    return prereqs;
+    return findProgramPrereqOption(course);
   };
 
   const markPrereqsAsCompleted = () => {
@@ -142,14 +123,66 @@ const Disciplinas = () => {
 
   const parseHistoryText = (text: string) => {
     const approved = new Set<string>();
+    
+    // Divide o texto em blocos por período (2022.1, 2022.2, etc.)
+    const periodBlocks = text.split(/(\d{4}\.\d+)/);
+    
+    for (let i = 1; i < periodBlocks.length; i += 2) {
+      const period = periodBlocks[i];
+      const content = periodBlocks[i + 1] || '';
+      
+      if (!content) continue;
+      
+      // Junta o período e o conteúdo para análise completa
+      const fullBlock = period + content;
+      
+      // Encontra todos os códigos neste bloco
+      const codes = fullBlock.match(codeRegex) || [];
+      if (codes.length === 0) continue;
+      
+      // Verifica se o bloco contém status aprovado
+      const hasRejected = rejectedTokens.some(token => fullBlock.includes(token));
+      const hasApproved = approvedTokens.some(token => fullBlock.includes(token));
+      
+      // Se tem aprovação e não tem rejeição, adiciona todos os códigos do bloco
+      if (hasApproved && !hasRejected) {
+        codes.forEach(c => approved.add(c));
+      }
+    }
+    
+    // Processa blocos sem período claro (últimas disciplinas, quebras de página)
+    // Procura por padrões de disciplina: nome + professor + status + código
+    const disciplinePattern = /([A-ZÀ-Ú][^()]*[A-ZÀ-Ú])\s*\([^)]*\)\s*(APR|CUMP|DISP|REP|REPF|TRANC|CANC)\s+([A-Z]{3,}\d{2,}[A-Z]?)/gi;
+    let match;
+    while ((match = disciplinePattern.exec(text)) !== null) {
+      const status = match[2];
+      const code = match[3];
+      
+      if (approvedTokens.includes(status) && !rejectedTokens.includes(status)) {
+        approved.add(code);
+      }
+    }
+    
+    // Padrão alternativo: status no final (formato PDF extraído)
+    const altPattern = /([A-ZÀ-Ú][^()]*[A-ZÀ-Ú])\s*\([^)]*\)\s+([A-Z]{3,}\d{2,}[A-Z]?)\s+\d+\s+[\d.]+\s+(APR|CUMP|DISP|REP|REPF|TRANC|CANC)/gi;
+    while ((match = altPattern.exec(text)) !== null) {
+      const code = match[2];
+      const status = match[3];
+      
+      if (approvedTokens.includes(status) && !rejectedTokens.includes(status)) {
+        approved.add(code);
+      }
+    }
+    
+    // Processamento fallback para linhas individuais (formatos não estruturados)
     const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
-
     for (const line of lines) {
       const codes = line.match(codeRegex) || [];
       if (codes.length === 0) continue;
 
       const hasRejected = rejectedTokens.some(token => line.includes(token));
       const hasApproved = approvedTokens.some(token => line.includes(token));
+      
       if (hasApproved && !hasRejected) {
         codes.forEach(c => approved.add(c));
       }
@@ -157,9 +190,15 @@ const Disciplinas = () => {
 
     // Equivalências: "Cumpriu <CODE>" ou "Cumpriu CODE - ..."
     const eqRegex = /Cumpriu\s+([A-Z]{3,}\d{2,}[A-Z]?)/gi;
-    let match;
-    while ((match = eqRegex.exec(text)) !== null) {
-      approved.add(match[1]);
+    let eqMatch;
+    while ((eqMatch = eqRegex.exec(text)) !== null) {
+      approved.add(eqMatch[1]);
+    }
+
+    // Equivalências: "através de CODE - NOME"
+    const eqThroughRegex = /através de\s+([A-Z]{3,}\d{2,}[A-Z]?)/gi;
+    while ((eqMatch = eqThroughRegex.exec(text)) !== null) {
+      approved.add(eqMatch[1]);
     }
 
     return Array.from(approved);
@@ -184,11 +223,19 @@ const Disciplinas = () => {
       if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
         const pdfjs = await import('pdfjs-dist');
         const { getDocument, GlobalWorkerOptions } = pdfjs as any;
-        const workerSrc = (await import('pdfjs-dist/build/pdf.worker.min.mjs')).default;
+        
+        // Configurar o worker corretamente para Vite
+        const workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
         GlobalWorkerOptions.workerSrc = workerSrc;
 
         const data = await file.arrayBuffer();
-        const pdf = await getDocument({ data }).promise;
+        const pdf = await getDocument({ 
+          data,
+          // Desabilitar worker para evitar problemas de CORS
+          disableWorker: true,
+          isEvalSupported: false
+        }).promise;
+        
         let fullText = '';
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
@@ -202,8 +249,8 @@ const Disciplinas = () => {
         handleParseImport(text);
       }
     } catch (err) {
-      console.error(err);
-      setImportError('Não foi possível ler o PDF. Copie e cole o texto do histórico como alternativa.');
+      console.error('Erro ao processar PDF:', err);
+      setImportError('Não foi possível ler o PDF. Tente copiar e colar o texto do histórico como alternativa.');
     } finally {
       setIsParsing(false);
       if (event.target) event.target.value = '';
@@ -322,34 +369,53 @@ const Disciplinas = () => {
     return Array.from(new Set(codes));
   };
 
-  const hasAllPrereqsDone = (course: Course) => {
+  // Função para encontrar a opção de pré-requisitos correspondente ao curso do usuário
+  const findProgramPrereqOption = (course: Course): string[] => {
     let prereqs = getPrereqCodes(course);
-
-    // cache from detalhes já buscados
-    if (prereqs.length === 0) {
-      const cached = prereqCache.get(course.code);
-      if (cached && cached.length > 0) {
-        prereqs = cached;
+    
+    // Se não tem pré-requisitos estruturados, retorna array vazio
+    if (!Array.isArray(prereqs) || prereqs.length === 0) {
+      return [];
+    }
+    
+    // Se é um array simples (não tem múltiplas opções), retorna como está
+    if (!Array.isArray(prereqs[0])) {
+      return prereqs;
+    }
+    
+    // Tem múltiplas opções - encontrar a correspondente ao curso
+    const options = prereqs as string[][];
+    const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
+    
+    // Para cada opção, verificar se corresponde ao curso do usuário
+    for (const option of options) {
+      // Buscar detalhes dos pré-requisitos para verificar se pertencem ao curso
+      const optionDetails = option.map(code => {
+        const course = allCoursesByCode.get(code);
+        return course;
+      }).filter(Boolean);
+      
+      // Verificar se algum dos pré-requisitos desta opção pertence ao curso do usuário
+      const belongsToMyProgram = optionDetails.some((detail: any) => {
+        if (!detail || !detail.program) return false;
+        const programTitle = (detail.program.title || '').trim().toLowerCase();
+        return myProgramTitles.has(programTitle);
+      });
+      
+      if (belongsToMyProgram) {
+        return option;
       }
     }
+    
+    // Se não encontrar correspondência, retorna a primeira opção (fallback)
+    return options[0] || [];
+  };
 
-    // fallback: índice global
+  const hasAllPrereqsDone = (course: Course) => {
+    const prereqs = findProgramPrereqOption(course);
+    
     if (prereqs.length === 0) {
-      const fallback = allCoursesByCode.get(course.code);
-      if (fallback) {
-        const fbCodes = getPrereqCodes(fallback as any);
-        if (fbCodes.length > 0) prereqs = fbCodes;
-      }
-    }
-
-    // Se ainda não temos pré-req e há detail_url, considerar bloqueado até carregar
-    if (prereqs.length === 0) {
-      const detailUrl = (course as any)?.detail_url;
-      if (detailUrl && !prereqCache.has(course.code)) {
-        return false;
-      }
-      // Se não há detail_url, assume que não tem pré-req
-      return true;
+      return true; // Sem pré-requisitos
     }
 
     return prereqs.every((code) => {
