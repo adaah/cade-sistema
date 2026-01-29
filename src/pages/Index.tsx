@@ -49,42 +49,8 @@ const Index = () => {
       return <ProgressView />;
     }
 
-    // Schedule view (default)
-    if (mySections.length === 0) {
-      return (
-        <div className="bg-card rounded-xl border border-border p-12 text-center">
-          <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-          <h2 className="text-lg font-semibold text-card-foreground mb-2">
-            Grade vazia
-          </h2>
-          <p className="text-muted-foreground mb-4">
-            Adicione disciplinas ao seu planejador para visualizar sua grade.
-          </p>
-          <Link
-            to="/planejador"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors"
-          >
-            Ir para o Planejador
-          </Link>
-        </div>
-      );
-    }
-
-    return isMobile ? (
-      <div className="space-y-6">
-        <ScheduleSummary />
-        <MobileSchedule />
-      </div>
-    ) : (
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-1">
-          <ScheduleSummary />
-        </div>
-        <div className="lg:col-span-3 bg-card rounded-xl border border-border p-4">
-          <ScheduleGrid />
-        </div>
-      </div>
-    );
+    // Schedule view (default) - Sem grade, apenas resumo
+    return <ScheduleSummary />;
   };
 
   return (

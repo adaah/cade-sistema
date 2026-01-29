@@ -98,24 +98,36 @@ const parseTimeCodes = (timeCodes: string[]): Array<{ dia: string; horarioInicio
 };
 
 // Componente memoizado para card de disciplina - otimiza performance
-const DisciplineCard = memo(({ course, onClick }: { course: Course; onClick: (course: Course) => void }) => (
-  <div 
-    key={course.code}
-    data-discipline-code={course.code}
-    onClick={() => onClick(course)}
-    className="p-3 md:p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-  >
-    <div className="font-semibold text-xs md:text-sm mb-1">{course.code}</div>
-    <div className="text-xs text-muted-foreground mb-2 line-clamp-2">
-      {course.name}
+const DisciplineCard = memo(({ course, onClick }: { course: Course; onClick: (course: Course) => void }) => {
+  const { completedDisciplines } = useApp();
+  const isCompleted = completedDisciplines.includes(course.code);
+  
+  return (
+    <div 
+      key={course.code}
+      data-discipline-code={course.code}
+      onClick={() => onClick(course)}
+      className="p-3 md:p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors relative"
+    >
+      {isCompleted && (
+        <div className="absolute top-2 right-2">
+          <Badge variant="default" className="bg-success text-success-foreground text-xs px-2 py-0.5">
+            Cursada
+          </Badge>
+        </div>
+      )}
+      <div className="font-semibold text-xs md:text-sm mb-1">{course.code}</div>
+      <div className="text-xs text-muted-foreground mb-2 line-clamp-2">
+        {course.name}
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge variant="secondary" className="text-xs">
+          {course.sections_count} turma{course.sections_count !== 1 ? 's' : ''}
+        </Badge>
+      </div>
     </div>
-    <div className="flex items-center gap-2">
-      <Badge variant="secondary" className="text-xs">
-        {course.sections_count} turma{course.sections_count !== 1 ? 's' : ''}
-      </Badge>
-    </div>
-  </div>
-));
+  );
+});
 
 DisciplineCard.displayName = 'DisciplineCard';
 
@@ -239,6 +251,7 @@ const Planejador = () => {
   
   const isLoading = loadingCourses || (selectedViewProgramId && !viewProgramDetail);
   const [filtroModalOpen, setFiltroModalOpen] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [diasSelecionados, setDiasSelecionados] = useState<string[]>([]);
   const [horariosSelecionados, setHorariosSelecionados] = useState<string[]>([]);
   const [logicaFiltroDia, setLogicaFiltroDia] = useState<'OU' | 'E'>('OU');
@@ -250,6 +263,7 @@ const Planejador = () => {
   const [logicaRestricoesHorario, setLogicaRestricoesHorario] = useState<'OU' | 'E'>('OU');
   
   const { hasSectionOnCourse, toggleSection, getConflictsForSection, mySections, clearSections } = useMySections();
+  const { completedDisciplines } = useApp();
   const { data: allSections = [] } = useSections();
   const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
   const [applyFiltersToSections, setApplyFiltersToSections] = useState(true);
@@ -276,6 +290,11 @@ const Planejador = () => {
     
     // Filtrar disciplinas com 0 turmas
     result = result.filter(course => (course.sections_count || 0) > 0);
+    
+    // Filtrar disciplinas cursadas se não estiverem visíveis
+    if (!showCompleted) {
+      result = result.filter(course => !completedDisciplines.includes(course.code));
+    }
     
     // Aplicar filtro de busca - otimizado com cache do termo
     if (searchTerm) {
@@ -356,6 +375,8 @@ const Planejador = () => {
   }, [
     courses,
     searchTerm,
+    showCompleted,
+    completedDisciplines,
     diasSelecionados,
     horariosSelecionados,
     diasRestritos,
@@ -574,6 +595,14 @@ const Planejador = () => {
                   {hasActiveFilters && (
                     <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-blue-500 shadow" aria-label="Filtros ativos"></span>
                   )}
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 border rounded px-3 py-2 text-sm bg-muted hover:bg-muted/70 transition"
+                  onClick={() => setShowCompleted(!showCompleted)}
+                >
+                  <Eye className="w-4 h-4" />
+                  {showCompleted ? 'Ocultar cursadas' : 'Mostrar cursadas'}
                 </button>
               </div>
 
