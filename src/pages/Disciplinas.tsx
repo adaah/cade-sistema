@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, AlertCircle, X, BookOpen, Upload } from 'lucide-react';
+import { Search, AlertCircle, X, BookOpen, Upload, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { reduce, append } from 'ramda'
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -44,7 +44,7 @@ const Disciplinas = () => {
   const [parsedCodes, setParsedCodes] = useState<string[]>([]);
   const [importError, setImportError] = useState<string>('');
   const [isParsing, setIsParsing] = useState(false);
-  const [prereqCache, setPrereqCache] = useState<Map<string, string[]>>(new Map());
+  const [prereqCache, setPrereqCache] = useState<Map<string, string[][]>>(new Map());
 
   useEffect(() => {
     const hasVisited = localStorage.getItem('firstVisitDisciplinas');
@@ -97,7 +97,9 @@ const Disciplinas = () => {
     if (prereqs.length === 0) {
       const cached = prereqCache.get(course.code);
       if (cached && cached.length > 0) {
-        prereqs = cached;
+        // Se tem múltiplas opções no cache, usa a primeira para compatibilidade
+        // A lógica completa está em hasAllPrereqsDone
+        prereqs = cached[0] || [];
       }
     }
 
@@ -323,8 +325,35 @@ const Disciplinas = () => {
         try {
           const detail = await fetchCourseDetail(item.url);
           const prereqs = (detail as any)?.prerequisites ?? [];
-          const codes = getPrereqCodes({ prerequisites: prereqs } as any);
-          updates.set(item.code, codes);
+          
+          // Processa múltiplas opções de pré-requisitos
+          if (Array.isArray(prereqs) && prereqs.length > 0) {
+            // Verifica se é array de arrays (múltiplas opções)
+            if (Array.isArray(prereqs[0])) {
+              // Já está no formato correto: array de arrays
+              const options = prereqs.map((option: any[]) => 
+                option.map(pr => pr.code || (typeof pr === 'string' ? pr : ''))
+              ).filter((codes: string[]) => codes.length > 0);
+              if (options.length > 0) {
+                updates.set(item.code, options);
+              } else {
+                // Se options ficou vazio, set como array vazio para indicar que não tem pré-req
+                updates.set(item.code, []);
+              }
+            } else {
+              // É uma lista simples, converte para formato de opções
+              const codes = getPrereqCodes({ prerequisites: prereqs } as any);
+              if (codes.length > 0) {
+                updates.set(item.code, [codes]);
+              } else {
+                // Se não encontrou códigos, set como array vazio para indicar que não tem pré-req
+                updates.set(item.code, []);
+              }
+            }
+          } else {
+            // Não tem pré-requisitos ou formato inválido
+            updates.set(item.code, []);
+          }
         } catch (e) {
           console.warn('Falha ao buscar pré-requisitos para', item.code, e);
         }
@@ -389,41 +418,57 @@ const Disciplinas = () => {
   };
 
   const hasAllPrereqsDone = (course: Course) => {
-    let prereqs = getPrereqCodes(course);
-
-    // cache from detalhes já buscados
-    if (prereqs.length === 0) {
-      const cached = prereqCache.get(course.code);
-      if (cached && cached.length > 0) {
-        prereqs = cached;
+    let prereqsOptions: string[][] = [];
+    
+    // Tenta obter pré-requisitos do detalhe do curso (formato com múltiplas opções)
+    const cached = prereqCache.get(course.code);
+    if (cached && cached.length > 0) {
+      // O cache agora sempre contém array de arrays (múltiplas opções)
+      prereqsOptions = cached;
+    } else {
+      // Tenta obter do próprio curso
+      let prereqs = getPrereqCodes(course);
+      
+      // fallback: índice global
+      if (prereqs.length === 0) {
+        const fallback = allCoursesByCode.get(course.code);
+        if (fallback) {
+          const fbCodes = getPrereqCodes(fallback as any);
+          if (fbCodes.length > 0) prereqs = fbCodes;
+        }
       }
-    }
-
-    // fallback: índice global
-    if (prereqs.length === 0) {
-      const fallback = allCoursesByCode.get(course.code);
-      if (fallback) {
-        const fbCodes = getPrereqCodes(fallback as any);
-        if (fbCodes.length > 0) prereqs = fbCodes;
+      
+      if (prereqs.length > 0) {
+        prereqsOptions = [prereqs];
       }
     }
 
     // Se ainda não temos pré-req e há detail_url, considerar bloqueado até carregar
-    if (prereqs.length === 0) {
+    if (prereqsOptions.length === 0) {
       const detailUrl = (course as any)?.detail_url;
       if (detailUrl && !prereqCache.has(course.code)) {
         return false;
       }
-      // Se não há detail_url, assume que não tem pré-req
+      // Se não há detail_url ou já foi buscado e não tem pré-req, assume que não tem pré-req
       return true;
     }
 
-    return prereqs.every((code) => {
-      const norm = normalizeCode(code);
-      const base = baseCode(norm);
-      return completedDisciplines.some((c) => {
-        const cNorm = normalizeCode(c);
-        return cNorm === norm || baseCode(cNorm) === base;
+    // Verifica se ALGUMA opção de pré-requisitos está completamente atendida
+    // Se todas as opções estão vazias, considera que não tem pré-req
+    const hasValidPrereqs = prereqsOptions.some(option => option.length > 0);
+    if (!hasValidPrereqs) {
+      return true; // Não tem pré-requisitos válidos
+    }
+
+    return prereqsOptions.some(prereqs => {
+      if (prereqs.length === 0) return true; // Opção vazia = sem pré-reqs
+      return prereqs.every((code) => {
+        const norm = normalizeCode(code);
+        const base = baseCode(norm);
+        return completedDisciplines.some((c) => {
+          const cNorm = normalizeCode(c);
+          return cNorm === norm || baseCode(cNorm) === base;
+        });
       });
     });
   };
@@ -462,6 +507,23 @@ const Disciplinas = () => {
 
   // Order select state: 'name' (default) | 'sections'
   const [orderBy, setOrderBy] = useState<'name' | 'sections'>('name');
+  // View mode state: 'all' | 'semester' | 'electives'
+  const [viewMode, setViewMode] = useState<'all' | 'semester' | 'electives'>('all');
+  // Selected semester for semester view
+  const [selectedSemester, setSelectedSemester] = useState<string>('');
+  
+  // Auto-select first semester when switching to semester view
+  useEffect(() => {
+    if (viewMode === 'semester' && !selectedSemester && levels.length > 0) {
+      const optCheck = (l: string) => /optat/i.test(l);
+      const orderedLevels = [
+        ...levels.filter((l) => !optCheck(l)),
+      ];
+      if (orderedLevels.length > 0) {
+        setSelectedSemester(orderedLevels[0]);
+      }
+    }
+  }, [viewMode, selectedSemester, levels]);
   // Catálogo global da universidade
   const [globalLimit, setGlobalLimit] = useState(60);
   useEffect(() => {
@@ -532,9 +594,10 @@ const Disciplinas = () => {
           />
         </div>
 
-        <Collapsible defaultOpen={false}>
-          <div className="mb-2 flex items-center justify-between gap-3 max-w-[100vw] overflow-x-auto">
-            <div className="flex items-center gap-2">
+        <div className="mb-6">
+          <div className="flex flex-wrap items-center gap-2 max-w-[100vw] overflow-x-auto">
+            {/* Filtros button */}
+            <Collapsible defaultOpen={false}>
               <CollapsibleTrigger className={cn(
                 'inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-card hover:bg-accent text-sm font-medium'
               )}>
@@ -543,41 +606,125 @@ const Disciplinas = () => {
                   {activeIds.length}
                 </Badge>
               </CollapsibleTrigger>
-              {/* Ordem dropdown */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Ordem:</span>
-                <Select value={orderBy} onValueChange={(v: 'name' | 'sections') => setOrderBy(v)}>
-                  <SelectTrigger className="h-9 w-auto min-w-[9rem] rounded-xl border border-border bg-card hover:bg-accent text-sm font-medium px-3">
-                    <SelectValue placeholder="Por Nome" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sections">Por Turmas</SelectItem>
-                    <SelectItem value="name">Por Nome</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <CollapsibleContent>
+                <div className="flex flex-wrap gap-2 mt-2 p-1 max-w-[100vw]">
+                  {filters.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => toggle(f.id)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all",
+                        isActive(f.id)
+                          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                          : "bg-muted text-muted-foreground hover:bg-accent"
+                      )}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+            
+            {/* Ordem button */}
+            <Select value={orderBy} onValueChange={(v: 'name' | 'sections') => setOrderBy(v)}>
+              <SelectTrigger className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-card hover:bg-accent text-sm font-medium h-auto w-auto">
+                <span>Ordem</span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sections">Por Turmas</SelectItem>
+                <SelectItem value="name">Por Nome</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* Visualização button */}
+            <Select value={viewMode} onValueChange={(v: 'all' | 'semester' | 'electives') => setViewMode(v)}>
+              <SelectTrigger className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-card hover:bg-accent text-sm font-medium h-auto w-auto">
+                <span>Visualização</span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tudo</SelectItem>
+                <SelectItem value="semester">Por Semestre</SelectItem>
+                <SelectItem value="electives">Optativas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Semester navigation for semester view */}
+        {viewMode === 'semester' && (
+          <div className="mb-6">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <button
+                onClick={() => {
+                  const optCheck = (l: string) => /optat/i.test(l);
+                  const orderedLevels = [
+                    ...levels.filter((l) => !optCheck(l)),
+                  ];
+                  const currentIndex = orderedLevels.indexOf(selectedSemester);
+                  if (currentIndex > 0) {
+                    setSelectedSemester(orderedLevels[currentIndex - 1]);
+                  }
+                }}
+                disabled={!selectedSemester || (() => {
+                  const optCheck = (l: string) => /optat/i.test(l);
+                  const orderedLevels = [
+                    ...levels.filter((l) => !optCheck(l)),
+                  ];
+                  const currentIndex = orderedLevels.indexOf(selectedSemester);
+                  return currentIndex <= 0;
+                })()}
+                className="p-2 rounded-lg border border-border bg-card hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              
+              <Select value={selectedSemester} onValueChange={setSelectedSemester}>
+                <SelectTrigger className="h-9 w-auto min-w-[12rem] rounded-xl border border-border bg-card hover:bg-accent text-sm font-medium px-3">
+                  <SelectValue placeholder="Selecione um semestre" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(() => {
+                    const optCheck = (l: string) => /optat/i.test(l);
+                    const orderedLevels = [
+                      ...levels.filter((l) => !optCheck(l)),
+                    ];
+                    return orderedLevels.map((level) => (
+                      <SelectItem key={level} value={level}>
+                        {level}
+                      </SelectItem>
+                    ));
+                  })()}
+                </SelectContent>
+              </Select>
+              
+              <button
+                onClick={() => {
+                  const optCheck = (l: string) => /optat/i.test(l);
+                  const orderedLevels = [
+                    ...levels.filter((l) => !optCheck(l)),
+                  ];
+                  const currentIndex = orderedLevels.indexOf(selectedSemester);
+                  if (currentIndex < orderedLevels.length - 1) {
+                    setSelectedSemester(orderedLevels[currentIndex + 1]);
+                  }
+                }}
+                disabled={!selectedSemester || (() => {
+                  const optCheck = (l: string) => /optat/i.test(l);
+                  const orderedLevels = [
+                    ...levels.filter((l) => !optCheck(l)),
+                  ];
+                  const currentIndex = orderedLevels.indexOf(selectedSemester);
+                  return currentIndex >= orderedLevels.length - 1;
+                })()}
+                className="p-2 rounded-lg border border-border bg-card hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
-          <CollapsibleContent>
-            <div className="flex flex-wrap gap-2 mb-6 p-1 max-w-[100vw]">
-              {filters.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => toggle(f.id)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all",
-                    isActive(f.id)
-                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-                      : "bg-muted text-muted-foreground hover:bg-accent"
-                  )}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+        )}
 
         {!isSimplified && (
           <div className="flex flex-wrap gap-4 mb-6">
@@ -647,6 +794,7 @@ const Disciplinas = () => {
                             available={true}
                             blocked={false}
                             onClick={() => setSelectedDiscipline(course)}
+                            onRestrictedAction={handleRestrictedAction}
                           />
                         </motion.div>
                       ))}
@@ -676,7 +824,16 @@ const Disciplinas = () => {
                 ...levels.filter((l) => !optCheck(l)),
                 ...levels.filter((l) => optCheck(l)),
               ];
-              return orderedLevels;
+              
+              // Filter levels based on view mode
+              let levelsToShow = orderedLevels;
+              if (viewMode === 'semester' && selectedSemester) {
+                levelsToShow = orderedLevels.filter(level => level === selectedSemester);
+              } else if (viewMode === 'electives') {
+                levelsToShow = orderedLevels.filter(optCheck);
+              }
+              
+              return levelsToShow;
             })().map((level) => {
               const semesterCourses = coursesByLevel[level] || [];
               const searched = fuzzyFilter<CourseApi>(semesterCourses, search, ['name', 'code']);
@@ -762,6 +919,7 @@ const Disciplinas = () => {
           <DisciplineDetail
             discipline={selectedDiscipline}
             onClose={() => setSelectedDiscipline(null)}
+            onRestrictedAction={handleRestrictedAction}
           />
         )}
 
@@ -1037,26 +1195,30 @@ const Disciplinas = () => {
                     </p>
                     
                     <div className="space-y-2">
-                      {getPrerequisitesList(pendingAction.course).map(prereqCode => (
-                        <div key={prereqCode} className="flex items-center gap-2 text-sm">
-                          <div className={cn(
-                            "w-2 h-2 rounded-full",
-                            completedDisciplines.includes(prereqCode) 
-                              ? "bg-success" 
-                              : "bg-muted"
-                          )} />
-                          <span className={cn(
-                            completedDisciplines.includes(prereqCode)
-                              ? "text-success line-through"
-                              : "text-foreground"
-                          )}>
-                            {prereqCode}
-                          </span>
-                          {completedDisciplines.includes(prereqCode) && (
-                            <span className="text-xs text-success">✓ Cursado</span>
-                          )}
-                        </div>
-                      ))}
+                      {getPrerequisitesList(pendingAction.course).map(prereqCode => {
+                        const prereqCourse = allCourses.find(c => c.code === prereqCode);
+                        const prereqName = prereqCourse?.name || '';
+                        return (
+                          <div key={prereqCode} className="flex items-center gap-2 text-sm">
+                            <div className={cn(
+                              "w-2 h-2 rounded-full",
+                              completedDisciplines.includes(prereqCode) 
+                                ? "bg-success" 
+                                : "bg-muted"
+                            )} />
+                            <span className={cn(
+                              completedDisciplines.includes(prereqCode)
+                                ? "text-success line-through"
+                                : "text-foreground"
+                            )}>
+                              {prereqCode}{prereqName ? ` - ${prereqName}` : ''}
+                            </span>
+                            {completedDisciplines.includes(prereqCode) && (
+                              <span className="text-xs text-success">✓ Cursado</span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
 
                     <p className="text-sm text-muted-foreground">

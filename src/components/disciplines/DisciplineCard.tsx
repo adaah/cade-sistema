@@ -60,7 +60,7 @@ export function DisciplineCard({ discipline, onClick, available, blocked, onRest
         "transition-all duration-200 hover:shadow-card-hover hover:scale-[1.02]",
         showCompletedStyles && "border-success/50 bg-success/5",
         !showCompletedStyles && showAvailable && "bg-warning/10 border-warning hover:bg-warning/20",
-        !showCompletedStyles && showBlocked && "bg-muted border-muted opacity-60"
+        !showCompletedStyles && showBlocked && "dark:bg-gray-800/50 bg-muted/30 border-gray-400 opacity-60"
       )}
       onClick={onClick}
     >
@@ -73,25 +73,13 @@ export function DisciplineCard({ discipline, onClick, available, blocked, onRest
               : showAvailable
               ? "bg-warning/10 text-warning"
               : showBlocked
-              ? "bg-muted text-muted-foreground"
+              ? "dark:bg-gray-700 dark:text-gray-300 bg-gray-200 text-gray-600"
               : "bg-muted text-muted-foreground"
           )}
         >
           {discipline.code}
         </span>
         <div className="flex items-center gap-1">
-          <motion.button
-            onClick={handleFavoriteClick}
-            className={cn(
-              'p-2 rounded-lg transition-colors',
-              favorite ? 'text-rose-600 bg-rose-500/10' : 'text-muted-foreground hover:bg-muted'
-            )}
-            aria-label={favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
-            whileHover={{ scale: 1.12 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Heart className={cn('w-4 h-4', favorite && 'fill-current')} />
-          </motion.button>
           <motion.button
             onClick={handleCompletedClick}
             className={cn(

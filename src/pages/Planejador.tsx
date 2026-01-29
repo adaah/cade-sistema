@@ -212,7 +212,7 @@ const Planejador = () => {
         return {
           code: c.code,
           name: idx?.name ?? c.name,
-          level: typeof c.semester === 'number' ? `Nível ${c.semester}` : (c.level ?? ''),
+          level: typeof c.semester === 'number' ? `${c.semester}º Semestre` : (c.level ?? '').replace("Nível", "Semestre"),
           type: c.type,
           credits: c.credits,
           workload: c.workload,

@@ -18,7 +18,18 @@ import { FavoriteButton } from '@/components/common/FavoriteButton';
 function CompletedButton({
   completed,
   onClick,
-}: { completed: boolean; onClick: () => void }) {
+  onRestrictedAction,
+  course,
+  isAvailable,
+  isBlocked,
+}: { 
+  completed: boolean; 
+  onClick: () => void;
+  onRestrictedAction?: (type: 'completed' | 'favorite', course: Course) => void;
+  course?: Course;
+  isAvailable?: boolean;
+  isBlocked?: boolean;
+}) {
   const controls = useAnimationControls();
   const didMount = useRef(false);
 
@@ -41,14 +52,32 @@ function CompletedButton({
     });
   }, [completed, controls]);
 
+  const handleClick = () => {
+    // Se já está cursada, permite desmarcar diretamente
+    if (completed) {
+      onClick();
+    } else if (onRestrictedAction && course) {
+      // Se não está cursada, verifica se está bloqueada
+      onRestrictedAction('completed', course);
+    } else {
+      onClick();
+    }
+  };
+
   return (
     <motion.button
-      onClick={onClick}
+      onClick={handleClick}
       animate={controls}
       whileHover={{ scale: 1.02 }}
       className={cn(
         'mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium origin-center transform-gpu will-change-transform',
-        completed ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80',
+        completed 
+          ? 'bg-success text-success-foreground' 
+          : isAvailable
+          ? 'bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20'
+          : isBlocked
+          ? 'dark:bg-gray-700 dark:text-gray-300 bg-gray-200 text-gray-600 border border-gray-400'
+          : 'bg-muted text-muted-foreground hover:bg-muted/80',
       )}
     >
       {completed ? (
@@ -64,9 +93,10 @@ function CompletedButton({
 interface DisciplineDetailProps {
   discipline: Course;
   onClose: () => void;
+  onRestrictedAction?: (type: 'completed' | 'favorite', course: Course) => void;
 }
 
-export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps) {
+export function DisciplineDetail({ discipline, onClose, onRestrictedAction }: DisciplineDetailProps) {
   const { completedDisciplines, toggleCompletedDiscipline } = useApp();
   const { mySections, toggleSection } = useMySections();
   // Estado local para navegação dentro do drawer
@@ -121,6 +151,46 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
   };
 
   const isCompleted = completedDisciplines.includes(currentCode);
+  
+  // Verificar se disciplina está disponível ou bloqueada
+  const currentCourse: Course = {
+    code: currentCode,
+    name: currentName,
+    prerequisites: currentDetail?.prerequisites || [],
+    mode: currentDetail?.mode || '',
+    id_ref: currentDetail?.id_ref || '',
+    location: currentDetail?.location || '',
+    department: currentDetail?.department || '',
+    type: currentDetail?.type || '',
+    credits: currentDetail?.credits || 0,
+    workload: currentDetail?.workload || 0,
+    sections_count: currentDetail?.sections_count || 0,
+    sections_url: currentDetail?.sections_url || '',
+    detail_url: currentDetail?.detail_url || ''
+  };
+  
+  // Importar a lógica de verificação de pré-requisitos
+  const hasAllPrereqsDone = (course: Course) => {
+    if (!course.prerequisites || course.prerequisites.length === 0) return true;
+    
+    // Se não há pré-requisitos ou é array vazio, está disponível
+    if (course.prerequisites.length === 0) return true;
+    
+    // Verificar se ALGUMA das opções de pré-requisitos está completamente atendida
+    for (const option of course.prerequisites) {
+      if (!option || option.length === 0) continue;
+      
+      // Se todos os pré-requisitos desta opção estão concluídos
+      if (option.every(prereq => completedDisciplines.includes(prereq.code || prereq))) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+  
+  const isAvailable = !isCompleted && hasAllPrereqsDone(currentCourse);
+  const isBlocked = !isCompleted && !isAvailable;
 
   // Local UI components (small and focused)
   const SectionHeader = ({
@@ -204,7 +274,14 @@ export function DisciplineDetail({ discipline, onClose }: DisciplineDetailProps)
             {(currentDetail as any)?.semester && <span>{(currentDetail as any)?.semester}º Semestre</span>}
           </div>
 
-          <CompletedButton completed={isCompleted} onClick={() => toggleCompletedDiscipline(currentCode)} />
+          <CompletedButton 
+            completed={isCompleted} 
+            onClick={() => toggleCompletedDiscipline(currentCode)} 
+            onRestrictedAction={onRestrictedAction}
+            course={currentCourse}
+            isAvailable={isAvailable}
+            isBlocked={isBlocked}
+          />
         </div>
 
         <div className="p-6 space-y-6">
