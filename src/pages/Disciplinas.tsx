@@ -91,7 +91,26 @@ const Disciplinas = () => {
   };
 
   const getPrerequisitesList = (course: Course): string[] => {
-    return findProgramPrereqOption(course);
+    let prereqs = getPrereqCodes(course);
+
+    // cache from detalhes já buscados
+    if (prereqs.length === 0) {
+      const cached = prereqCache.get(course.code);
+      if (cached && cached.length > 0) {
+        prereqs = cached;
+      }
+    }
+
+    // fallback: índice global
+    if (prereqs.length === 0) {
+      const fallback = allCoursesByCode.get(course.code);
+      if (fallback) {
+        const fbCodes = getPrereqCodes(fallback as any);
+        if (fbCodes.length > 0) prereqs = fbCodes;
+      }
+    }
+
+    return prereqs;
   };
 
   const markPrereqsAsCompleted = () => {
@@ -369,53 +388,34 @@ const Disciplinas = () => {
     return Array.from(new Set(codes));
   };
 
-  // Função para encontrar a opção de pré-requisitos correspondente ao curso do usuário
-  const findProgramPrereqOption = (course: Course): string[] => {
+  const hasAllPrereqsDone = (course: Course) => {
     let prereqs = getPrereqCodes(course);
-    
-    // Se não tem pré-requisitos estruturados, retorna array vazio
-    if (!Array.isArray(prereqs) || prereqs.length === 0) {
-      return [];
-    }
-    
-    // Se é um array simples (não tem múltiplas opções), retorna como está
-    if (!Array.isArray(prereqs[0])) {
-      return prereqs;
-    }
-    
-    // Tem múltiplas opções - encontrar a correspondente ao curso
-    const options = prereqs as string[][];
-    const myProgramTitles = new Set(myPrograms.map(p => (p.title || '').trim().toLowerCase()));
-    
-    // Para cada opção, verificar se corresponde ao curso do usuário
-    for (const option of options) {
-      // Buscar detalhes dos pré-requisitos para verificar se pertencem ao curso
-      const optionDetails = option.map(code => {
-        const course = allCoursesByCode.get(code);
-        return course;
-      }).filter(Boolean);
-      
-      // Verificar se algum dos pré-requisitos desta opção pertence ao curso do usuário
-      const belongsToMyProgram = optionDetails.some((detail: any) => {
-        if (!detail || !detail.program) return false;
-        const programTitle = (detail.program.title || '').trim().toLowerCase();
-        return myProgramTitles.has(programTitle);
-      });
-      
-      if (belongsToMyProgram) {
-        return option;
+
+    // cache from detalhes já buscados
+    if (prereqs.length === 0) {
+      const cached = prereqCache.get(course.code);
+      if (cached && cached.length > 0) {
+        prereqs = cached;
       }
     }
-    
-    // Se não encontrar correspondência, retorna a primeira opção (fallback)
-    return options[0] || [];
-  };
 
-  const hasAllPrereqsDone = (course: Course) => {
-    const prereqs = findProgramPrereqOption(course);
-    
+    // fallback: índice global
     if (prereqs.length === 0) {
-      return true; // Sem pré-requisitos
+      const fallback = allCoursesByCode.get(course.code);
+      if (fallback) {
+        const fbCodes = getPrereqCodes(fallback as any);
+        if (fbCodes.length > 0) prereqs = fbCodes;
+      }
+    }
+
+    // Se ainda não temos pré-req e há detail_url, considerar bloqueado até carregar
+    if (prereqs.length === 0) {
+      const detailUrl = (course as any)?.detail_url;
+      if (detailUrl && !prereqCache.has(course.code)) {
+        return false;
+      }
+      // Se não há detail_url, assume que não tem pré-req
+      return true;
     }
 
     return prereqs.every((code) => {
