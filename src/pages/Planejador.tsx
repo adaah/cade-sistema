@@ -572,7 +572,7 @@ const Planejador = () => {
               </div>
 
               {/* Barra de busca e filtros */}
-              <div className="mb-4 flex flex-col md:flex-row md:items-center md:gap-3 gap-2">
+              <div className="mb-2 md:mb-3 flex flex-col md:flex-row md:items-center md:gap-3 gap-2">
                 <input
                   type="text"
                   placeholder="Buscar disciplina..."
@@ -592,15 +592,21 @@ const Planejador = () => {
                     <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-blue-500 shadow" aria-label="Filtros ativos"></span>
                   )}
                 </button>
-                <button
-                  type="button"
-                  className="flex items-center gap-1 border rounded px-3 py-2 text-sm bg-muted hover:bg-muted/70 transition"
-                  onClick={() => setShowCompleted(!showCompleted)}
-                >
-                  <Eye className="w-4 h-4" />
-                  {showCompleted ? 'Ocultar cursadas' : 'Mostrar cursadas'}
-                </button>
               </div>
+
+              {/* Botão de mostrar/ocultar cursadas (apenas se houver cursadas) */}
+              {completedDisciplines.length > 0 && (
+                <div className="mb-4 flex md:flex-row md:items-center gap-2">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 border rounded px-3 py-2 text-sm bg-muted hover:bg-muted/70 transition"
+                    onClick={() => setShowCompleted(!showCompleted)}
+                  >
+                    <Eye className="w-4 h-4" />
+                    {showCompleted ? 'Ocultar cursadas' : 'Mostrar cursadas'}
+                  </button>
+                </div>
+              )}
 
               <div className="max-h-[600px] overflow-y-auto">
                 <div className="grid grid-cols-1 gap-3 md:gap-4">
