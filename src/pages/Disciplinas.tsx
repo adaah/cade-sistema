@@ -20,6 +20,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { parseCompleteHistory } from '@/utils/historyParser';
 
 const Disciplinas = () => {
   const { completedDisciplines, toggleCompletedDiscipline } = useApp();
@@ -42,6 +43,9 @@ const Disciplinas = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [parsedCodes, setParsedCodes] = useState<string[]>([]);
+  const [parsedSemesters, setParsedSemesters] = useState<Map<string, { approved: number, failed: number, dropped: number, notDone: number }>>(new Map());
+  const [parsedWorkload, setParsedWorkload] = useState<WorkloadData | null>(null);
+  const [disciplinesBySemester, setDisciplinesBySemester] = useState<Map<string, { approved: string[]; total: string[] }>>(new Map());
   const [importError, setImportError] = useState<string>('');
   const [isParsing, setIsParsing] = useState(false);
   const [prereqCache, setPrereqCache] = useState<Map<string, string[][]>>(new Map());
@@ -138,100 +142,42 @@ const Disciplinas = () => {
     setPendingAction(null);
   };
 
-  const codeRegex = /[A-Z]{3,}\d{2,}[A-Z]?/g;
-  const approvedTokens = ['APR', 'CUMP', 'DISP'];
-  const rejectedTokens = ['REP', 'REPF', 'REPMF', 'TRANC', 'CANC'];
-
-  const parseHistoryText = (text: string) => {
-    const approved = new Set<string>();
-    
-    // Divide o texto em blocos por período (2022.1, 2022.2, etc.)
-    const periodBlocks = text.split(/(\d{4}\.\d+)/);
-    
-    for (let i = 1; i < periodBlocks.length; i += 2) {
-      const period = periodBlocks[i];
-      const content = periodBlocks[i + 1] || '';
-      
-      if (!content) continue;
-      
-      // Junta o período e o conteúdo para análise completa
-      const fullBlock = period + content;
-      
-      // Encontra todos os códigos neste bloco
-      const codes = fullBlock.match(codeRegex) || [];
-      if (codes.length === 0) continue;
-      
-      // Verifica se o bloco contém status aprovado
-      const hasRejected = rejectedTokens.some(token => fullBlock.includes(token));
-      const hasApproved = approvedTokens.some(token => fullBlock.includes(token));
-      
-      // Se tem aprovação e não tem rejeição, adiciona todos os códigos do bloco
-      if (hasApproved && !hasRejected) {
-        codes.forEach(c => approved.add(c));
+  // Carrega progressData salvo (para manter sincronizado com tela de Progresso)
+  useEffect(() => {
+    const savedData = localStorage.getItem('progressData');
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData);
+        setParsedCodes(parsed.codes || []);
+        setParsedSemesters(new Map(parsed.semesters || []));
+        setParsedWorkload(parsed.workload || null);
+        setDisciplinesBySemester(new Map(parsed.disciplinesBySemester || []));
+      } catch (error) {
+        console.error('Erro ao carregar progressData:', error);
       }
     }
-    
-    // Processa blocos sem período claro (últimas disciplinas, quebras de página)
-    // Procura por padrões de disciplina: nome + professor + status + código
-    const disciplinePattern = /([A-ZÀ-Ú][^()]*[A-ZÀ-Ú])\s*\([^)]*\)\s*(APR|CUMP|DISP|REP|REPF|TRANC|CANC)\s+([A-Z]{3,}\d{2,}[A-Z]?)/gi;
-    let match;
-    while ((match = disciplinePattern.exec(text)) !== null) {
-      const status = match[2];
-      const code = match[3];
-      
-      if (approvedTokens.includes(status) && !rejectedTokens.includes(status)) {
-        approved.add(code);
-      }
-    }
-    
-    // Padrão alternativo: status no final (formato PDF extraído)
-    const altPattern = /([A-ZÀ-Ú][^()]*[A-ZÀ-Ú])\s*\([^)]*\)\s+([A-Z]{3,}\d{2,}[A-Z]?)\s+\d+\s+[\d.]+\s+(APR|CUMP|DISP|REP|REPF|TRANC|CANC)/gi;
-    while ((match = altPattern.exec(text)) !== null) {
-      const code = match[2];
-      const status = match[3];
-      
-      if (approvedTokens.includes(status) && !rejectedTokens.includes(status)) {
-        approved.add(code);
-      }
-    }
-    
-    // Processamento fallback para linhas individuais (formatos não estruturados)
-    const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      const codes = line.match(codeRegex) || [];
-      if (codes.length === 0) continue;
-
-      const hasRejected = rejectedTokens.some(token => line.includes(token));
-      const hasApproved = approvedTokens.some(token => line.includes(token));
-      
-      if (hasApproved && !hasRejected) {
-        codes.forEach(c => approved.add(c));
-      }
-    }
-
-    // Equivalências: "Cumpriu <CODE>" ou "Cumpriu CODE - ..."
-    const eqRegex = /Cumpriu\s+([A-Z]{3,}\d{2,}[A-Z]?)/gi;
-    let eqMatch;
-    while ((eqMatch = eqRegex.exec(text)) !== null) {
-      approved.add(eqMatch[1]);
-    }
-
-    // Equivalências: "através de CODE - NOME"
-    const eqThroughRegex = /através de\s+([A-Z]{3,}\d{2,}[A-Z]?)/gi;
-    while ((eqMatch = eqThroughRegex.exec(text)) !== null) {
-      approved.add(eqMatch[1]);
-    }
-
-    return Array.from(approved);
-  };
+  }, []);
 
   const handleParseImport = (text: string) => {
     setImportError('');
-    const codes = parseHistoryText(text);
-    setParsedCodes(codes);
+    const result = parseCompleteHistory(text);
+    setParsedCodes(result.codes);
+    setParsedSemesters(result.semesters);
+    setParsedWorkload(result.workload);
+    setDisciplinesBySemester(result.disciplinesBySemester);
     setImportText(text);
-    if (codes.length === 0) {
-      setImportError('Não foi possível encontrar disciplinas com status aprovado. Confira o texto ou tente outro arquivo.');
+
+    // Salva no mesmo formato usado pela Home/Progress
+    const dataToSave = {
+      codes: result.codes,
+      semesters: Array.from(result.semesters.entries()),
+      workload: result.workload,
+      disciplinesBySemester: Array.from(result.disciplinesBySemester.entries()),
+    };
+    localStorage.setItem('progressData', JSON.stringify(dataToSave));
+
+    if (result.codes.length === 0 && !result.workload) {
+      setImportError('Não foi possível encontrar disciplinas com status aprovado ou tabela de carga horária. Confira o texto ou tente outro arquivo.');
     }
   };
 
@@ -998,8 +944,12 @@ const Disciplinas = () => {
                     onClick={() => {
                       setShowImportModal(false);
                       setParsedCodes([]);
+                      setParsedSemesters(new Map());
+                      setParsedWorkload(null);
+                      setDisciplinesBySemester(new Map());
                       setImportText('');
                       setImportError('');
+                      localStorage.removeItem('progressData');
                     }}
                     className="px-4 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-muted"
                   >
